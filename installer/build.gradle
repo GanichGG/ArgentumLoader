@@ -1,0 +1,61 @@
+plugins {
+	id 'java'
+}
+
+java {
+	sourceCompatibility = JavaVersion.VERSION_1_8
+	targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+def generatedResources = layout.buildDirectory.dir('generated/resources')
+
+// Собственный jar лоадера не опубликован на публичном maven, поэтому якорь
+// кладёт его на диск сам; сторонние библиотеки (Mixin, ASM) остаются на
+// maven.fabricmc.net и их штатно скачивает лаунчер.
+tasks.register('copyLoaderJar', Copy) {
+	dependsOn rootProject.tasks.named('finalJar')
+	from rootProject.tasks.named('finalJar').get().archiveFile
+	into generatedResources
+	rename { 'argentumloader.jar' }
+}
+
+tasks.register('generateAnchorLibraries') {
+	def installerConfig = rootProject.configurations.getByName('installer')
+	dependsOn installerConfig
+
+	def outFile = generatedResources.map { it.file('anchor-libraries.properties') }
+	outputs.file(outFile)
+	outputs.upToDateWhen { false }
+
+	doLast {
+		def sb = new StringBuilder()
+		sb << "# сгенерировано автоматически задачей generateAnchorLibraries, не редактировать\n"
+
+		def artifacts = installerConfig.resolvedConfiguration.resolvedArtifacts
+		int i = 0
+
+		for (artifact in artifacts) {
+			sb << "lib.${i}.name=${artifact.moduleVersion}\n"
+			sb << "lib.${i}.url=https://maven.fabricmc.net/\n"
+			i++
+		}
+
+		sb << "count=${i}\n"
+		sb << "mainClass=net.fabricmc.loader.impl.launch.knot.KnotClient\n"
+		sb << "loader.group=${rootProject.group}\n"
+		sb << "loader.artifact=argentum-loader\n"
+		sb << "loader.version=${rootProject.version}\n"
+
+		outFile.get().asFile.text = sb.toString()
+	}
+}
+
+sourceSets.main.resources.srcDir generatedResources
+processResources.dependsOn copyLoaderJar, generateAnchorLibraries
+
+jar {
+	archiveBaseName = 'argentum-anchor'
+	manifest {
+		attributes 'Main-Class': 'net.fabricmc.installer.anchor.AnchorMain'
+	}
+}
