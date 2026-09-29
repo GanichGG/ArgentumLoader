@@ -1,19 +1,22 @@
 {
   "schemaVersion": 1,
   "id": "fabricloader",
-  "name": "Fabric Loader",
+  "provides": [
+    "argentumloader"
+  ],
+  "name": "ArgentumLoader",
   "version": "${version}",
   "environment": "*",
-  "description": "The base mod loader.",
+  "description": "Fabric-compatible mod loader (ArgentumLoader fork).",
   "contact": {
-    "homepage": "https://fabricmc.net",
-    "irc": "ircs://irc.esper.net:6697/fabric",
-    "issues": "https://github.com/FabricMC/fabric-loader/issues",
-    "sources": "https://github.com/FabricMC/fabric-loader"
+    "homepage": "https://github.com/GanichGG/ArgentumLoader",
+    "issues": "https://github.com/GanichGG/ArgentumLoader/issues",
+    "sources": "https://github.com/GanichGG/ArgentumLoader"
   },
   "license": "Apache-2.0",
   "icon": "assets/fabricloader/icon.png",
   "authors": [
-    "FabricMC"
+    "FabricMC",
+    "GanichGG"
   ]
 }
