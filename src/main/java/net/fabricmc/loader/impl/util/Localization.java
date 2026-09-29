@@ -26,7 +26,9 @@ import java.util.PropertyResourceBundle;
 import java.util.ResourceBundle;
 
 public final class Localization {
-	public static final ResourceBundle BUNDLE = createBundle("net.fabricmc.loader.Messages", Locale.getDefault());
+	// ArgentumLoader: force root bundle (Messages.properties, translated to Russian) regardless of
+	// the OS locale, instead of following Locale.getDefault() like upstream Fabric Loader does.
+	public static final ResourceBundle BUNDLE = createBundle("net.fabricmc.loader.Messages", Locale.ROOT);
 	public static final ResourceBundle ROOT_LOCALE_BUNDLE = createBundle("net.fabricmc.loader.Messages", Locale.ROOT);
 
 	public static String format(String key, Object... args) {
