@@ -45,12 +45,12 @@ public class DirectoryModCandidateFinder implements ModCandidateFinder {
 				Files.createDirectory(path);
 				return;
 			} catch (IOException e) {
-				throw new RuntimeException("Could not create directory " + path, e);
+				throw new RuntimeException("Не удалось создать директорию " + path, e);
 			}
 		}
 
 		if (!Files.isDirectory(path)) {
-			throw new RuntimeException(path + " is not a directory!");
+			throw new RuntimeException(path + " не является директорией!");
 		}
 
 		try {
@@ -65,7 +65,7 @@ public class DirectoryModCandidateFinder implements ModCandidateFinder {
 				}
 			});
 		} catch (IOException e) {
-			throw new RuntimeException("Exception while searching for mods in '" + path + "'!", e);
+			throw new RuntimeException("Ошибка при поиске модов в '" + path + "'!", e);
 		}
 	}
 

@@ -101,7 +101,7 @@ public class ModResolver {
 
 			if (mods.size() > 1) {
 				mods.remove(builtinMod);
-				throw new ModResolutionException("Mods share ID with builtin mod %s: %s", builtinMod, mods);
+				throw new ModResolutionException("Моды используют тот же id, что и встроенный мод %s: %s", builtinMod, mods);
 			}
 
 			preselectedMods.add(builtinMod);
@@ -122,7 +122,7 @@ public class ModResolver {
 			result = ModSolver.solve(allModsSorted, modsById,
 					selectedMods, uniqueSelectedMods);
 		} catch (ContradictionException | TimeoutException e) {
-			throw new ModResolutionException("Solving failed", e);
+			throw new ModResolutionException("Не удалось разрешить зависимости", e);
 		}
 
 		if (!result.success) {
@@ -146,7 +146,7 @@ public class ModResolver {
 				}
 			}
 
-			throw new ModResolutionException("Some of your mods are incompatible with the game or each other!%s",
+			throw new ModResolutionException("Некоторые из ваших модов несовместимы с игрой или друг с другом!%s",
 					ResultAnalyzer.gatherErrors(result, selectedMods, modsById, envDisabledMods, envType));
 		}
 
@@ -221,11 +221,11 @@ public class ModResolver {
 
 	static void selectMod(ModCandidateImpl mod, Map<String, ModCandidateImpl> selectedMods, List<ModCandidateImpl> uniqueSelectedMods) throws ModResolutionException {
 		ModCandidateImpl prev = selectedMods.put(mod.getId(), mod);
-		if (prev != null) throw new ModResolutionException("duplicate mod %s", mod.getId());
+		if (prev != null) throw new ModResolutionException("повторяющийся мод %s", mod.getId());
 
 		for (String provided : mod.getProvides()) {
 			prev = selectedMods.put(provided, mod);
-			if (prev != null) throw new ModResolutionException("duplicate mod %s", provided);
+			if (prev != null) throw new ModResolutionException("повторяющийся мод %s", provided);
 		}
 
 		uniqueSelectedMods.add(mod);

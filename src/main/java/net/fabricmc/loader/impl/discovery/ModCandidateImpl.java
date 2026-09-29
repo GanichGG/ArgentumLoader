@@ -79,7 +79,7 @@ public final class ModCandidateImpl implements DomainObject.Mod {
 	}
 
 	static long hash(ZipEntry entry) {
-		if (entry.getSize() < 0 || entry.getCrc() < 0) throw new IllegalArgumentException("uninitialized entry: "+entry);
+		if (entry.getSize() < 0 || entry.getCrc() < 0) throw new IllegalArgumentException("неинициализированная запись: "+entry);
 
 		return entry.getCrc() << 32 | entry.getSize();
 	}
@@ -109,13 +109,13 @@ public final class ModCandidateImpl implements DomainObject.Mod {
 	}
 
 	public List<Path> getPaths() {
-		if (paths == null) throw new IllegalStateException("no path set");
+		if (paths == null) throw new IllegalStateException("путь не задан");
 
 		return paths;
 	}
 
 	public void setPaths(List<Path> paths) {
-		if (paths == null) throw new NullPointerException("null paths");
+		if (paths == null) throw new NullPointerException("paths равен null");
 
 		this.paths = paths;
 		clearCachedData();
@@ -283,7 +283,7 @@ public final class ModCandidateImpl implements DomainObject.Mod {
 		}
 
 		if (paths != null) {
-			if (paths.size() != 1) throw new UnsupportedOperationException("multiple paths for "+this);
+			if (paths.size() != 1) throw new UnsupportedOperationException("несколько путей для "+this);
 
 			Files.copy(paths.get(0), out);
 
@@ -293,11 +293,11 @@ public final class ModCandidateImpl implements DomainObject.Mod {
 		ModCandidateImpl parent = getBestSourcingParent();
 
 		if (parent.paths != null) {
-			if (parent.paths.size() != 1) throw new UnsupportedOperationException("multiple parent paths for "+this);
+			if (parent.paths.size() != 1) throw new UnsupportedOperationException("несколько родительских путей для "+this);
 
 			try (ZipFile zf = new ZipFile(parent.paths.get(0).toFile())) {
 				ZipEntry entry = zf.getEntry(localPath);
-				if (entry == null) throw new IOException(String.format("can't find nested mod %s in its parent mod %s", this, parent));
+				if (entry == null) throw new IOException(String.format("не удалось найти вложенный мод %s в родительском моде %s", this, parent));
 
 				Files.copy(zf.getInputStream(entry), out);
 			}
@@ -315,7 +315,7 @@ public final class ModCandidateImpl implements DomainObject.Mod {
 				}
 			}
 
-			throw new IOException(String.format("can't find nested mod %s in its parent mod %s", this, parent));
+			throw new IOException(String.format("не удалось найти вложенный мод %s в родительском моде %s", this, parent));
 		}
 	}
 
@@ -330,18 +330,18 @@ public final class ModCandidateImpl implements DomainObject.Mod {
 		ByteBuffer ret;
 
 		if (paths != null) {
-			if (paths.size() != 1) throw new UnsupportedOperationException("multiple paths for "+this);
+			if (paths.size() != 1) throw new UnsupportedOperationException("несколько путей для "+this);
 
 			ret = ByteBuffer.wrap(Files.readAllBytes(paths.get(0)));
 		} else {
 			ModCandidateImpl parent = getBestSourcingParent();
 
 			if (parent.paths != null) {
-				if (parent.paths.size() != 1) throw new UnsupportedOperationException("multiple parent paths for "+this);
+				if (parent.paths.size() != 1) throw new UnsupportedOperationException("несколько родительских путей для "+this);
 
 				try (ZipFile zf = new ZipFile(parent.paths.get(0).toFile())) {
 					ZipEntry entry = zf.getEntry(localPath);
-					if (entry == null) throw new IOException(String.format("can't find nested mod %s in its parent mod %s", this, parent));
+					if (entry == null) throw new IOException(String.format("не удалось найти вложенный мод %s в родительском моде %s", this, parent));
 
 					ret = ModDiscoverer.readMod(zf.getInputStream(entry));
 				}
@@ -360,7 +360,7 @@ public final class ModCandidateImpl implements DomainObject.Mod {
 					}
 				}
 
-				if (ret == null) throw new IOException(String.format("can't find nested mod %s in its parent mods %s", this, parent));
+				if (ret == null) throw new IOException(String.format("не удалось найти вложенный мод %s в родительских модах %s", this, parent));
 			}
 		}
 
@@ -385,7 +385,7 @@ public final class ModCandidateImpl implements DomainObject.Mod {
 			if (ret == null) ret = parent;
 		}
 
-		if (ret == null) throw new IllegalStateException("invalid nesting?");
+		if (ret == null) throw new IllegalStateException("некорректная вложенность?");
 
 		return ret;
 	}

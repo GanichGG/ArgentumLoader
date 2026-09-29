@@ -120,7 +120,7 @@ public final class ModDiscoverer {
 						mod.metadata.getId(), mod.metadata.getVersion());
 
 				if (loader.isDevelopmentEnvironment()) { // fail hard in-dev
-					throw new FormattedException("Invalid game version", error);
+					throw new FormattedException("Недопустимая версия игры", error);
 				} else {
 					Log.warn(LogCategory.GENERAL, error);
 				}
@@ -171,11 +171,11 @@ public final class ModDiscoverer {
 				}
 			}
 		} catch (TimeoutException e) {
-			throw new FormattedException("Mod discovery took too long!",
+			throw new FormattedException("Поиск модов занял слишком много времени!",
 					"Analyzing the mod folder contents took longer than %d seconds. This may be caused by unusually slow hardware, pathological antivirus interference or other issues. The timeout can be changed with the system property %s (-D%<s=<desired timeout in seconds>).",
 					timeout, SystemProperties.DEBUG_DISCOVERY_TIMEOUT);
 		} catch (InterruptedException e) {
-			throw new FormattedException("Mod discovery interrupted!", e);
+			throw new FormattedException("Поиск модов был прерван!", e);
 		}
 
 		if (exception != null) {
@@ -277,7 +277,7 @@ public final class ModDiscoverer {
 				} catch (ParseMetadataException e) { // already contains all context
 					throw ExceptionUtil.wrap(e);
 				} catch (Throwable t) {
-					throw new RuntimeException(String.format("Error analyzing nested jar %s from %s: %s", localPath, parentPaths, t), t);
+					throw new RuntimeException(String.format("Ошибка анализа вложенного jar %s из %s: %s", localPath, parentPaths, t), t);
 				}
 			} else { // regular classes-dir or jar
 				try {
@@ -297,7 +297,7 @@ public final class ModDiscoverer {
 				} catch (ParseMetadataException e) { // already contains all context
 					throw ExceptionUtil.wrap(e);
 				} catch (Throwable t) {
-					throw new RuntimeException(String.format("Error analyzing %s: %s", paths, t), t);
+					throw new RuntimeException(String.format("Ошибка анализа %s: %s", paths, t), t);
 				}
 
 				return null;

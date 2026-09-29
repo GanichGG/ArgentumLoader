@@ -74,7 +74,7 @@ public class ArgumentModCandidateFinder implements ModCandidateFinder {
 						addMod(line, fileSource, out);
 					}
 				} catch (IOException e) {
-					throw new RuntimeException(String.format("Error reading %s provided mod list file %s", source, path), e);
+					throw new RuntimeException(String.format("Ошибка чтения файла списка модов %s (%s)", path, source), e);
 				}
 			} else {
 				addMod(pathStr, source, out);

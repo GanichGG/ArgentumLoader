@@ -99,7 +99,7 @@ public final class RuntimeModRemapper {
 
 				if (mod.hasPath()) {
 					List<Path> paths = mod.getPaths();
-					if (paths.size() != 1) throw new UnsupportedOperationException("multiple path for "+mod);
+					if (paths.size() != 1) throw new UnsupportedOperationException("несколько путей для "+mod);
 
 					info.inputPath = paths.get(0);
 				} else {
@@ -119,7 +119,7 @@ public final class RuntimeModRemapper {
 						FileSystem fs = jarFs.get();
 						info.classTweaker = Files.readAllBytes(fs.getPath(classTweaker));
 					} catch (Throwable t) {
-						throw new RuntimeException("Error reading class tweaker for mod '" +mod.getId()+ "'!", t);
+						throw new RuntimeException("Ошибка чтения class tweaker для мода '" +mod.getId()+ "'!", t);
 					}
 
 					ClassTweakerReader.create(mergedClassTweaker).read(info.classTweaker, modNs);
@@ -137,7 +137,7 @@ public final class RuntimeModRemapper {
 			try {
 				remapper.readClassPathAsync(getRemapClasspath().toArray(new Path[0]));
 			} catch (IOException e) {
-				throw new RuntimeException("Failed to populate remap classpath", e);
+				throw new RuntimeException("Не удалось собрать classpath для ремаппинга", e);
 			}
 
 			String defaultMixinRemapType = System.getProperty(SystemProperties.DEFAULT_MIXIN_REMAP_TYPE, REMAP_TYPE_MIXIN);
@@ -163,7 +163,7 @@ public final class RuntimeModRemapper {
 				FileSystemUtil.FileSystemDelegate delegate = FileSystemUtil.getJarFileSystem(info.inputPath, false);
 
 				if (delegate.get() == null) {
-					throw new RuntimeException("Could not open JAR file " + info.inputPath.getFileName() + " for NIO reading!");
+					throw new RuntimeException("Не удалось открыть JAR-файл " + info.inputPath.getFileName() + " для чтения через NIO!");
 				}
 
 				Path inputJar = delegate.get().getRootDirectories().iterator().next();
@@ -218,7 +218,7 @@ public final class RuntimeModRemapper {
 				}
 			}
 
-			throw new FormattedException("Failed to remap mods!", t);
+			throw new FormattedException("Не удалось ремаппнуть моды!", t);
 		} finally {
 			for (RemapInfo info : infoMap.values()) {
 				try {
@@ -242,7 +242,7 @@ public final class RuntimeModRemapper {
 		String remapClasspathFile = System.getProperty(SystemProperties.REMAP_CLASSPATH_FILE);
 
 		if (remapClasspathFile == null) {
-			throw new RuntimeException("No remapClasspathFile provided");
+			throw new RuntimeException("Не указан remapClasspathFile");
 		}
 
 		String content = new String(Files.readAllBytes(Paths.get(remapClasspathFile)), StandardCharsets.UTF_8);
