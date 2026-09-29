@@ -23,6 +23,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -31,7 +32,9 @@ import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Properties;
 
 import javax.swing.BorderFactory;
@@ -68,16 +71,19 @@ public final class AnchorMain {
 		String presetVersion = args.length > 0 ? args[0] : null;
 
 		try {
-			Path profilePath = install(presetVersion);
+			InstallResult result = install(presetVersion);
 			String message = "<html><b>ArgentumLoader установлен!</b><br><br>"
-					+ "Профиль записан в:<br>" + escapeHtml(profilePath.toString()) + "<br><br>"
+					+ "Профиль записан в:<br>" + escapeHtml(result.profilePath.toString()) + "<br><br>"
 					+ "Теперь выберите профиль <b>ArgentumLoader</b> в лаунчере Minecraft и нажмите «Играть» —<br>"
 					+ "недостающие библиотеки лаунчер скачает сам.</html>";
 
 			if (HEADLESS) {
-				System.out.println(profilePath);
+				System.out.println(result.profilePath);
 			} else {
+				// Диалог блокирует поток до закрытия — самоочистку планируем уже после этого,
+				// чтобы не пытаться удалить ещё выполняющийся .exe/jar (файл будет занят).
 				JOptionPane.showMessageDialog(null, message, "ArgentumLoader", JOptionPane.INFORMATION_MESSAGE);
+				scheduleCleanup(result.leftovers);
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -91,8 +97,9 @@ public final class AnchorMain {
 		}
 	}
 
-	private static Path install(String presetVersion) throws IOException {
-		Path gameDir = findGameDir();
+	private static InstallResult install(String presetVersion) throws IOException {
+		InstallLocation location = findInstallLocation();
+		Path gameDir = location.gameDir;
 
 		String mcVersion = presetVersion;
 
@@ -135,14 +142,36 @@ public final class AnchorMain {
 		String json = buildProfileJson(profileId, mcVersion, mainClass, ownCoordinate, thirdPartyLibraries);
 		Files.write(profileJson, json.getBytes(StandardCharsets.UTF_8));
 
-		return profileJson;
+		return new InstallResult(profileJson, location.leftovers);
+	}
+
+	private static final class InstallResult {
+		final Path profilePath;
+		final List<Path> leftovers;
+
+		InstallResult(Path profilePath, List<Path> leftovers) {
+			this.profilePath = profilePath;
+			this.leftovers = leftovers;
+		}
+	}
+
+	private static final class InstallLocation {
+		final Path gameDir;
+		/** Собственные файлы якоря (exe/app/runtime или сам jar) — после успешной установки не нужны. */
+		final List<Path> leftovers;
+
+		InstallLocation(Path gameDir, List<Path> leftovers) {
+			this.gameDir = gameDir;
+			this.leftovers = leftovers;
+		}
 	}
 
 	/**
-	 * Папка, в которой физически лежит сам anchor-jar — а не рабочая директория процесса
-	 * (на Windows при запуске двойным кликом она может оказаться System32).
+	 * Папка, в которой физически лежит сам якорь — а не рабочая директория процесса
+	 * (на Windows при запуске двойным кликом она может оказаться System32) — плюс список
+	 * его собственных файлов, которые после успешной установки становятся не нужны.
 	 */
-	private static Path findGameDir() {
+	private static InstallLocation findInstallLocation() {
 		try {
 			CodeSource codeSource = AnchorMain.class.getProtectionDomain().getCodeSource();
 
@@ -154,24 +183,77 @@ public final class AnchorMain {
 
 					// В .exe-сборке (jpackage --type app-image) jar лежит не рядом с .exe,
 					// а во вложенной папке "app": <корень>/app/<jar>, <корень>/runtime/,
-					// <корень>/ArgentumAnchor.exe — в этом случае нужен именно <корень>.
+					// <корень>/ArgentumAnchor.exe — в этом случае нужен именно <корень>,
+					// а мусор для очистки — вся тройка (app/, runtime/, сам .exe).
 					Path appImageRoot = jarDir.getParent();
 
 					if (appImageRoot != null
 							&& "app".equals(jarDir.getFileName().toString())
 							&& Files.isDirectory(appImageRoot.resolve("runtime"))) {
-						return appImageRoot;
+						List<Path> leftovers = new ArrayList<>();
+						leftovers.add(jarDir);
+						leftovers.add(appImageRoot.resolve("runtime"));
+
+						Path exe = findSiblingExe(appImageRoot);
+						if (exe != null) leftovers.add(exe);
+
+						return new InstallLocation(appImageRoot, leftovers);
 					}
 
-					return jarDir;
+					return new InstallLocation(jarDir, Collections.singletonList(jarPath));
 				}
 			}
 		} catch (URISyntaxException e) {
 			// падаем на fallback ниже
 		}
 
-		// Например, при запуске не из jar (dev-окружение) — берём рабочую директорию.
-		return Paths.get("").toAbsolutePath();
+		// Например, при запуске не из jar (dev-окружение) — берём рабочую директорию, чистить нечего.
+		return new InstallLocation(Paths.get("").toAbsolutePath(), Collections.emptyList());
+	}
+
+	private static Path findSiblingExe(Path root) {
+		try (DirectoryStream<Path> stream = Files.newDirectoryStream(root, "*.exe")) {
+			for (Path p : stream) {
+				return p; // в app-image ровно один .exe
+			}
+		} catch (IOException ignored) {
+			// не критично — просто не удалим .exe отдельно
+		}
+
+		return null;
+	}
+
+	/**
+	 * Планирует удаление собственных файлов якоря отдельным (не дочерним для JVM) процессом
+	 * с небольшой задержкой — напрямую удалить их сейчас нельзя: .exe/jar ещё заняты, пока
+	 * этот процесс не завершится. На игру и уже записанные versions/libraries не влияет —
+	 * в список leftovers они не входят.
+	 */
+	private static void scheduleCleanup(List<Path> leftovers) {
+		if (leftovers.isEmpty() || !isWindows()) {
+			return;
+		}
+
+		StringBuilder cmd = new StringBuilder("ping 127.0.0.1 -n 3 > nul");
+
+		for (Path p : leftovers) {
+			String quoted = "\"" + p.toAbsolutePath() + "\"";
+			cmd.append(" & ").append(Files.isDirectory(p) ? "rmdir /s /q " : "del /f /q ").append(quoted);
+		}
+
+		try {
+			new ProcessBuilder("cmd", "/c", cmd.toString())
+					.redirectOutput(ProcessBuilder.Redirect.DISCARD)
+					.redirectError(ProcessBuilder.Redirect.DISCARD)
+					.start();
+		} catch (IOException e) {
+			// самоочистка — необязательный бонус, установку из-за её сбоя не проваливаем
+			e.printStackTrace();
+		}
+	}
+
+	private static boolean isWindows() {
+		return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
 	}
 
 	private static String askVersion(Path gameDir) {

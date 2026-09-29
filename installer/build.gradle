@@ -77,6 +77,7 @@ tasks.register('jpackageAnchor', Exec) {
 	def inputDir = layout.buildDirectory.dir('jpackage-input').get().asFile
 	def outputDir = layout.buildDirectory.dir('jpackage').get().asFile
 	def jarFile = tasks.named('jar').get().archiveFile.get().asFile
+	def iconFile = project.file('src/main/resources/icon/argentum.ico')
 
 	// jpackage требует чисто числовую версию (major[.minor[.patch]]), а на Windows major не
 	// может быть 0 — отбрасываем "+local" и поднимаем major до 1, если он нулевой.
@@ -87,6 +88,7 @@ tasks.register('jpackageAnchor', Exec) {
 	def appVersion = versionParts.join('.')
 
 	inputs.file(jarFile)
+	inputs.file(iconFile)
 	outputs.dir(outputDir)
 
 	doFirst {
@@ -107,6 +109,7 @@ tasks.register('jpackageAnchor', Exec) {
 			'--main-class', 'net.fabricmc.installer.anchor.AnchorMain',
 			'--name', 'ArgentumAnchor',
 			'--app-version', appVersion,
+			'--icon', iconFile.absolutePath,
 			'--dest', outputDir.absolutePath
 	)
 }
