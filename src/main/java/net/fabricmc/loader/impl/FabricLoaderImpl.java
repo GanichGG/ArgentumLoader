@@ -19,6 +19,7 @@ package net.fabricmc.loader.impl;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -199,10 +200,35 @@ public final class FabricLoaderImpl extends net.fabricmc.loader.FabricLoader {
 			setup();
 		} catch (ModResolutionException exception) {
 			if (exception.getCause() == null) {
-				throw FormattedException.ofLocalized("exception.incompatible", exception.getMessage());
+				throw FormattedException.ofLocalized("exception.incompatible", buildIncompatibilityMessage(exception));
 			} else {
 				throw FormattedException.ofLocalized("exception.incompatible", exception);
 			}
+		}
+	}
+
+	/**
+	 * ArgentumLoader: keep the console/log/GUI message short (just what's incompatible), while the
+	 * full mod-by-mod report (all "участники ДТП" — every mod version considered, every conflicting
+	 * dependency) is written to a dedicated file instead of flooding the console on every launch
+	 * failure.
+	 */
+	private String buildIncompatibilityMessage(ModResolutionException exception) {
+		String shortMessage = exception.getMessage();
+		String fullReport = exception.getFullReport();
+
+		if (fullReport.equals(shortMessage)) {
+			return shortMessage; // nothing extra to split off, e.g. exception built without withFullReport
+		}
+
+		Path reportPath = gameDir.resolve("argentumloader-incompatible-mods.txt");
+
+		try {
+			Files.write(reportPath, fullReport.getBytes(StandardCharsets.UTF_8));
+			return shortMessage + "\nПолный список конфликтующих модов и версий сохранён в файл: " + reportPath;
+		} catch (IOException e) {
+			Log.warn(LogCategory.GENERAL, "Не удалось сохранить подробный отчёт о несовместимости модов", e);
+			return shortMessage + fullReport; // fall back to the old behavior rather than losing the details
 		}
 	}
 

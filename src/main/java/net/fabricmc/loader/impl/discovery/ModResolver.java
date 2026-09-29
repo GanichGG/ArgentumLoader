@@ -146,7 +146,8 @@ public class ModResolver {
 				}
 			}
 
-			throw new ModResolutionException("Некоторые из ваших модов несовместимы с игрой или друг с другом!%s",
+			throw ModResolutionException.withFullReport(
+					"Некоторые из ваших модов несовместимы с игрой или друг с другом!",
 					ResultAnalyzer.gatherErrors(result, selectedMods, modsById, envDisabledMods, envType));
 		}
 
