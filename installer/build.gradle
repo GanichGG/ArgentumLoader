@@ -59,3 +59,54 @@ jar {
 		attributes 'Main-Class': 'net.fabricmc.installer.anchor.AnchorMain'
 	}
 }
+
+// Портативный .exe со встроенной Java — чтобы якорь работал даже у игроков без
+// отдельно установленной Java. app-image (не msi/exe-инсталлятор), поэтому не
+// требует WiX на машине сборки: просто папка с .exe и рантаймом внутри, которую
+// можно скопировать/заzip'ить и раздать как есть.
+tasks.register('jpackageAnchor', Exec) {
+	dependsOn jar
+	group = 'distribution'
+	description = 'Собирает портативный ArgentumAnchor.exe со встроенной Java (jpackage)'
+
+	def jdk21 = javaToolchains.launcherFor {
+		languageVersion = JavaLanguageVersion.of(21)
+	}.get()
+	def jpackageBin = jdk21.metadata.installationPath.file('bin/jpackage.exe')
+
+	def inputDir = layout.buildDirectory.dir('jpackage-input').get().asFile
+	def outputDir = layout.buildDirectory.dir('jpackage').get().asFile
+	def jarFile = tasks.named('jar').get().archiveFile.get().asFile
+
+	// jpackage требует чисто числовую версию (major[.minor[.patch]]), а на Windows major не
+	// может быть 0 — отбрасываем "+local" и поднимаем major до 1, если он нулевой.
+	def versionParts = project.version.toString().split('\\+')[0].split('\\.')
+	if (versionParts.length > 0 && versionParts[0] == '0') {
+		versionParts[0] = '1'
+	}
+	def appVersion = versionParts.join('.')
+
+	inputs.file(jarFile)
+	outputs.dir(outputDir)
+
+	doFirst {
+		delete inputDir
+		inputDir.mkdirs()
+		copy {
+			from jarFile
+			into inputDir
+		}
+		delete outputDir
+	}
+
+	commandLine(
+			jpackageBin.asFile.absolutePath,
+			'--type', 'app-image',
+			'--input', inputDir.absolutePath,
+			'--main-jar', jarFile.name,
+			'--main-class', 'net.fabricmc.installer.anchor.AnchorMain',
+			'--name', 'ArgentumAnchor',
+			'--app-version', appVersion,
+			'--dest', outputDir.absolutePath
+	)
+}

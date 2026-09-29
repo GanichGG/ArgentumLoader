@@ -150,7 +150,20 @@ public final class AnchorMain {
 				Path jarPath = Paths.get(codeSource.getLocation().toURI());
 
 				if (Files.isRegularFile(jarPath)) {
-					return jarPath.getParent().toAbsolutePath();
+					Path jarDir = jarPath.getParent().toAbsolutePath();
+
+					// В .exe-сборке (jpackage --type app-image) jar лежит не рядом с .exe,
+					// а во вложенной папке "app": <корень>/app/<jar>, <корень>/runtime/,
+					// <корень>/ArgentumAnchor.exe — в этом случае нужен именно <корень>.
+					Path appImageRoot = jarDir.getParent();
+
+					if (appImageRoot != null
+							&& "app".equals(jarDir.getFileName().toString())
+							&& Files.isDirectory(appImageRoot.resolve("runtime"))) {
+						return appImageRoot;
+					}
+
+					return jarDir;
 				}
 			}
 		} catch (URISyntaxException e) {
