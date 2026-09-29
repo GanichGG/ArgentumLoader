@@ -24,7 +24,9 @@ import net.fabricmc.loader.impl.util.Localization;
 public class LocalizationTests {
 	@Test
 	public void formatRoot() {
-		Assertions.assertEquals("client", Localization.formatRoot("environment.client"));
-		Assertions.assertEquals("Install A, B.", Localization.formatRoot("resolution.solution.addMod", "A", "B"));
+		// ArgentumLoader: root bundle is pinned to Russian (see Localization.BUNDLE), unlike
+		// upstream Fabric Loader where Locale.ROOT resolves to the English default.
+		Assertions.assertEquals("клиент", Localization.formatRoot("environment.client"));
+		Assertions.assertEquals("Установите A, B.", Localization.formatRoot("resolution.solution.addMod", "A", "B"));
 	}
 }
