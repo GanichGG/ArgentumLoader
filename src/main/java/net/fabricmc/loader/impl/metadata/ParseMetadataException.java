@@ -30,7 +30,7 @@ public class ParseMetadataException extends Exception {
 	}
 
 	public ParseMetadataException(String message, JsonReader reader) {
-		this(message + " Error was located at: " + reader.locationString());
+		this(message + " Место ошибки: " + reader.locationString());
 	}
 
 	public ParseMetadataException(String message, Throwable throwable) {
@@ -48,10 +48,10 @@ public class ParseMetadataException extends Exception {
 
 	@Override
 	public String getMessage() {
-		String ret = "Error reading fabric.mod.json file for mod at ";
+		String ret = "Ошибка чтения fabric.mod.json мода, расположение: ";
 
 		if (modPaths == null) {
-			ret += "unknown location";
+			ret += "неизвестно";
 		} else {
 			ret += String.join(" -> ", modPaths);
 		}
@@ -67,7 +67,7 @@ public class ParseMetadataException extends Exception {
 
 	public static class MissingField extends ParseMetadataException {
 		public MissingField(String field) {
-			super(String.format("Missing required field \"%s\".", field));
+			super(String.format("Отсутствует обязательное поле \"%s\".", field));
 		}
 	}
 }

@@ -85,7 +85,7 @@ abstract class CustomValueImpl implements CustomValue {
 		if (this instanceof ObjectImpl) {
 			return (ObjectImpl) this;
 		} else {
-			throw new ClassCastException("can't convert "+getType().name()+" to Object");
+			throw new ClassCastException("невозможно преобразовать "+getType().name()+" в Object");
 		}
 	}
 
@@ -94,7 +94,7 @@ abstract class CustomValueImpl implements CustomValue {
 		if (this instanceof ArrayImpl) {
 			return (ArrayImpl) this;
 		} else {
-			throw new ClassCastException("can't convert "+getType().name()+" to Array");
+			throw new ClassCastException("невозможно преобразовать "+getType().name()+" в Array");
 		}
 	}
 
@@ -103,7 +103,7 @@ abstract class CustomValueImpl implements CustomValue {
 		if (this instanceof StringImpl) {
 			return ((StringImpl) this).value;
 		} else {
-			throw new ClassCastException("can't convert "+getType().name()+" to String");
+			throw new ClassCastException("невозможно преобразовать "+getType().name()+" в String");
 		}
 	}
 
@@ -112,7 +112,7 @@ abstract class CustomValueImpl implements CustomValue {
 		if (this instanceof NumberImpl) {
 			return ((NumberImpl) this).value;
 		} else {
-			throw new ClassCastException("can't convert "+getType().name()+" to Number");
+			throw new ClassCastException("невозможно преобразовать "+getType().name()+" в Number");
 		}
 	}
 
@@ -121,7 +121,7 @@ abstract class CustomValueImpl implements CustomValue {
 		if (this instanceof BooleanImpl) {
 			return ((BooleanImpl) this).value;
 		} else {
-			throw new ClassCastException("can't convert "+getType().name()+" to Boolean");
+			throw new ClassCastException("невозможно преобразовать "+getType().name()+" в Boolean");
 		}
 	}
 

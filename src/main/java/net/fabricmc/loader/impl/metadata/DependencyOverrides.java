@@ -53,24 +53,24 @@ public final class DependencyOverrides {
 		try (JsonReader reader = new JsonReader(new InputStreamReader(Files.newInputStream(path), StandardCharsets.UTF_8))) {
 			dependencyOverrides = parse(reader);
 		} catch (IOException | ParseMetadataException e) {
-			throw FormattedException.ofLocalized("exception.parsingOverride", "Failed to parse " + LoaderUtil.normalizePath(path), e);
+			throw FormattedException.ofLocalized("exception.parsingOverride", "Не удалось разобрать файл " + LoaderUtil.normalizePath(path), e);
 		}
 	}
 
 	private static Map<String, List<Entry>> parse(JsonReader reader) throws ParseMetadataException, IOException {
 		if (reader.peek() != JsonToken.BEGIN_OBJECT) {
-			throw new ParseMetadataException("Root must be an object", reader);
+			throw new ParseMetadataException("Корень должен быть объектом", reader);
 		}
 
 		Map<String, List<Entry>> ret = new HashMap<>();
 		reader.beginObject();
 
 		if (!reader.nextName().equals("version")) {
-			throw new ParseMetadataException("First key must be \"version\"", reader);
+			throw new ParseMetadataException("Первым ключом должен быть \"version\"", reader);
 		}
 
 		if (reader.peek() != JsonToken.NUMBER || reader.nextInt() != 1) {
-			throw new ParseMetadataException("Unsupported \"version\", must be 1", reader);
+			throw new ParseMetadataException("Неподдерживаемое значение \"version\", должно быть 1", reader);
 		}
 
 		while (reader.hasNext()) {
@@ -87,7 +87,7 @@ public final class DependencyOverrides {
 
 				reader.endObject();
 			} else {
-				throw new ParseMetadataException("Unsupported root key: " + key, reader);
+				throw new ParseMetadataException("Неподдерживаемый ключ верхнего уровня: " + key, reader);
 			}
 		}
 
@@ -98,7 +98,7 @@ public final class DependencyOverrides {
 
 	private static List<Entry> readKeys(JsonReader reader) throws IOException, ParseMetadataException {
 		if (reader.peek() != JsonToken.BEGIN_OBJECT) {
-			throw new ParseMetadataException("Dependency container must be an object!", reader);
+			throw new ParseMetadataException("Контейнер зависимостей должен быть объектом!", reader);
 		}
 
 		Map<ModDependency.Kind, Map<Operation, List<ModDependency>>> modOverrides = new EnumMap<>(ModDependency.Kind.class);
@@ -121,7 +121,7 @@ public final class DependencyOverrides {
 			ModDependency.Kind kind = ModDependency.Kind.parse(key);
 
 			if (kind == null) {
-				throw new ParseMetadataException(String.format("%s is not an allowed dependency key, must be one of: %s",
+				throw new ParseMetadataException(String.format("\"%s\" — недопустимый ключ зависимости, должен быть одним из: %s",
 						key, Arrays.stream(ModDependency.Kind.values()).map(ModDependency.Kind::getKey).collect(Collectors.joining(", "))),
 						reader);
 			}
@@ -159,7 +159,7 @@ public final class DependencyOverrides {
 
 	private static List<ModDependency> readDependencies(JsonReader reader, ModDependency.Kind kind) throws IOException, ParseMetadataException {
 		if (reader.peek() != JsonToken.BEGIN_OBJECT) {
-			throw new ParseMetadataException("Dependency container must be an object!", reader);
+			throw new ParseMetadataException("Контейнер зависимостей должен быть объектом!", reader);
 		}
 
 		List<ModDependency> ret = new ArrayList<>();
@@ -178,7 +178,7 @@ public final class DependencyOverrides {
 
 				while (reader.hasNext()) {
 					if (reader.peek() != JsonToken.STRING) {
-						throw new ParseMetadataException("Dependency version range array must only contain string values", reader);
+						throw new ParseMetadataException("Массив диапазонов версий зависимости должен содержать только строки", reader);
 					}
 
 					matcherStringList.add(reader.nextString());
@@ -187,7 +187,7 @@ public final class DependencyOverrides {
 				reader.endArray();
 				break;
 			default:
-				throw new ParseMetadataException("Dependency version range must be a string or string array!", reader);
+				throw new ParseMetadataException("Диапазон версий зависимости должен быть строкой или массивом строк!", reader);
 			}
 
 			try {

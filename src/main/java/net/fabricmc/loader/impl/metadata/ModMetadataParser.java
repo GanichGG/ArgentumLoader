@@ -80,7 +80,7 @@ public final class ModMetadataParser {
 			reader.setRewindEnabled(true);
 
 			if (reader.peek() != JsonToken.BEGIN_OBJECT) {
-				throw new ParseMetadataException("Root of \"fabric.mod.json\" must be an object", reader);
+				throw new ParseMetadataException("Корень fabric.mod.json должен быть объектом", reader);
 			}
 
 			reader.beginObject();
@@ -93,7 +93,7 @@ public final class ModMetadataParser {
 
 				if (key.equals("schemaVersion")) {
 					if (reader.peek() != JsonToken.NUMBER) {
-						throw new ParseMetadataException("\"schemaVersion\" must be a number.", reader);
+						throw new ParseMetadataException("Значение \"schemaVersion\" должно быть числом.", reader);
 					}
 
 					schemaVersion = reader.nextInt();
@@ -143,11 +143,11 @@ public final class ModMetadataParser {
 			return V0ModMetadataParser.parse(reader);
 		default:
 			if (schemaVersion > 0) {
-				throw new ParseMetadataException(String.format("This version of fabric-loader doesn't support the newer schema version of \"%s\""
-						+ "\nPlease update fabric-loader to be able to read this.", schemaVersion));
+				throw new ParseMetadataException(String.format("Эта версия ArgentumLoader не поддерживает более новую версию схемы \"%s\"."
+						+ "\nОбновите ArgentumLoader, чтобы прочитать этот файл.", schemaVersion));
 			}
 
-			throw new ParseMetadataException(String.format("Invalid/Unsupported schema version \"%s\" was found", schemaVersion));
+			throw new ParseMetadataException(String.format("Указана недопустимая/неподдерживаемая версия схемы \"%s\"", schemaVersion));
 		}
 	}
 

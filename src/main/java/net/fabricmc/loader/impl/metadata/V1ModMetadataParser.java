@@ -92,32 +92,32 @@ final class V1ModMetadataParser {
 			case "schemaVersion":
 				// Duplicate field, make sure it matches our current schema version
 				if (reader.peek() != JsonToken.NUMBER) {
-					throw new ParseMetadataException("Duplicate \"schemaVersion\" field is not a number", reader);
+					throw new ParseMetadataException("Повторное поле \"schemaVersion\" не является числом", reader);
 				}
 
 				final int read = reader.nextInt();
 
 				if (read != 1) {
-					throw new ParseMetadataException(String.format("Duplicate \"schemaVersion\" field does not match the predicted schema version of 1. Duplicate field value is %s", read), reader);
+					throw new ParseMetadataException(String.format("Повторное поле \"schemaVersion\" не совпадает с ожидаемой версией схемы 1. Указанное значение: %s", read), reader);
 				}
 
 				break;
 			case "id":
 				if (reader.peek() != JsonToken.STRING) {
-					throw new ParseMetadataException("Mod id must be a non-empty string with a length of 3-64 characters.", reader);
+					throw new ParseMetadataException("Id мода должен быть непустой строкой длиной 3-64 символа.", reader);
 				}
 
 				id = reader.nextString();
 				break;
 			case "version":
 				if (reader.peek() != JsonToken.STRING) {
-					throw new ParseMetadataException("Version must be a non-empty string", reader);
+					throw new ParseMetadataException("Версия должна быть непустой строкой", reader);
 				}
 
 				try {
 					version = VersionParser.parse(reader.nextString(), false);
 				} catch (VersionParsingException e) {
-					throw new ParseMetadataException("Failed to parse version", e);
+					throw new ParseMetadataException("Не удалось разобрать версию", e);
 				}
 
 				break;
@@ -126,7 +126,7 @@ final class V1ModMetadataParser {
 				break;
 			case "environment":
 				if (reader.peek() != JsonToken.STRING) {
-					throw new ParseMetadataException("Environment must be a string", reader);
+					throw new ParseMetadataException("Значение \"environment\" должно быть строкой", reader);
 				}
 
 				environment = readEnvironment(reader);
@@ -142,7 +142,7 @@ final class V1ModMetadataParser {
 				break;
 			case "accessWidener":
 				if (reader.peek() != JsonToken.STRING) {
-					throw new ParseMetadataException("Access Widener file must be a string", reader);
+					throw new ParseMetadataException("Путь к файлу Access Widener должен быть строкой", reader);
 				}
 
 				classTweaker = reader.nextString();
@@ -168,14 +168,14 @@ final class V1ModMetadataParser {
 				break;
 			case "name":
 				if (reader.peek() != JsonToken.STRING) {
-					throw new ParseMetadataException("Mod name must be a string", reader);
+					throw new ParseMetadataException("Название мода должно быть строкой", reader);
 				}
 
 				name = reader.nextString();
 				break;
 			case "description":
 				if (reader.peek() != JsonToken.STRING) {
-					throw new ParseMetadataException("Mod description must be a string", reader);
+					throw new ParseMetadataException("Описание мода должно быть строкой", reader);
 				}
 
 				description = reader.nextString();
@@ -203,7 +203,7 @@ final class V1ModMetadataParser {
 				break;
 			default:
 				if (!ModMetadataParser.IGNORED_KEYS.contains(key)) {
-					warnings.add(new ParseWarning(reader.getLineNumber(), reader.getColumn(), key, "Unsupported root entry"));
+					warnings.add(new ParseWarning(reader.getLineNumber(), reader.getColumn(), key, "Неподдерживаемое поле верхнего уровня"));
 				}
 
 				reader.skipValue();
@@ -230,14 +230,14 @@ final class V1ModMetadataParser {
 
 	private static void readProvides(JsonReader reader, List<String> provides) throws IOException, ParseMetadataException {
 		if (reader.peek() != JsonToken.BEGIN_ARRAY) {
-			throw new ParseMetadataException("Provides must be an array");
+			throw new ParseMetadataException("Значение \"provides\" должно быть массивом");
 		}
 
 		reader.beginArray();
 
 		while (reader.hasNext()) {
 			if (reader.peek() != JsonToken.STRING) {
-				throw new ParseMetadataException("Provided id must be a string", reader);
+				throw new ParseMetadataException("Id в \"provides\" должен быть строкой", reader);
 			}
 
 			provides.add(reader.nextString());
@@ -256,14 +256,14 @@ final class V1ModMetadataParser {
 		} else if (environment.equals("server")) {
 			return ModEnvironment.SERVER;
 		} else {
-			throw new ParseMetadataException("Invalid environment type: " + environment + "!", reader);
+			throw new ParseMetadataException("Недопустимое значение \"environment\": " + environment + "!", reader);
 		}
 	}
 
 	private static void readEntrypoints(List<ParseWarning> warnings, JsonReader reader, Map<String, List<EntrypointMetadata>> entrypoints) throws IOException, ParseMetadataException {
 		// Entrypoints must be an object
 		if (reader.peek() != JsonToken.BEGIN_OBJECT) {
-			throw new ParseMetadataException("Entrypoints must be an object", reader);
+			throw new ParseMetadataException("Значение \"entrypoints\" должно быть объектом", reader);
 		}
 
 		reader.beginObject();
@@ -274,7 +274,7 @@ final class V1ModMetadataParser {
 			List<EntrypointMetadata> metadata = new ArrayList<>();
 
 			if (reader.peek() != JsonToken.BEGIN_ARRAY) {
-				throw new ParseMetadataException("Entrypoint list must be an array!", reader);
+				throw new ParseMetadataException("Список entrypoint'ов должен быть массивом!", reader);
 			}
 
 			reader.beginArray();
@@ -301,7 +301,7 @@ final class V1ModMetadataParser {
 							value = reader.nextString();
 							break;
 						default:
-							warnings.add(new ParseWarning(reader.getLineNumber(), reader.getColumn(), entryKey, "Invalid entry in entrypoint metadata"));
+							warnings.add(new ParseWarning(reader.getLineNumber(), reader.getColumn(), entryKey, "Недопустимое поле в метаданных entrypoint"));
 							reader.skipValue();
 							break;
 						}
@@ -310,11 +310,11 @@ final class V1ModMetadataParser {
 					reader.endObject();
 					break;
 				default:
-					throw new ParseMetadataException("Entrypoint must be a string or object with \"value\" field", reader);
+					throw new ParseMetadataException("Entrypoint должен быть строкой либо объектом с полем \"value\"", reader);
 				}
 
 				if (value == null) {
-					throw new ParseMetadataException.MissingField("Entrypoint value must be present");
+					throw new ParseMetadataException.MissingField("value у entrypoint'а");
 				}
 
 				metadata.add(new V1ModMetadata.EntrypointMetadataImpl(adapter, value));
@@ -331,14 +331,14 @@ final class V1ModMetadataParser {
 
 	private static void readNestedJarEntries(List<ParseWarning> warnings, JsonReader reader, List<NestedJarEntry> jars) throws IOException, ParseMetadataException {
 		if (reader.peek() != JsonToken.BEGIN_ARRAY) {
-			throw new ParseMetadataException("Jar entries must be in an array", reader);
+			throw new ParseMetadataException("Значение \"jars\" должно быть массивом", reader);
 		}
 
 		reader.beginArray();
 
 		while (reader.hasNext()) {
 			if (reader.peek() != JsonToken.BEGIN_OBJECT) {
-				throw new ParseMetadataException("Invalid type for JAR entry!", reader);
+				throw new ParseMetadataException("Недопустимый тип элемента в \"jars\"!", reader);
 			}
 
 			reader.beginObject();
@@ -349,12 +349,12 @@ final class V1ModMetadataParser {
 
 				if (key.equals("file")) {
 					if (reader.peek() != JsonToken.STRING) {
-						throw new ParseMetadataException("\"file\" entry in jar object must be a string", reader);
+						throw new ParseMetadataException("Поле \"file\" в элементе \"jars\" должно быть строкой", reader);
 					}
 
 					file = reader.nextString();
 				} else {
-					warnings.add(new ParseWarning(reader.getLineNumber(), reader.getColumn(), key, "Invalid entry in jar entry"));
+					warnings.add(new ParseWarning(reader.getLineNumber(), reader.getColumn(), key, "Неподдерживаемое поле в элементе \"jars\""));
 					reader.skipValue();
 				}
 			}
@@ -362,7 +362,7 @@ final class V1ModMetadataParser {
 			reader.endObject();
 
 			if (file == null) {
-				throw new ParseMetadataException("Missing mandatory key 'file' in JAR entry!", reader);
+				throw new ParseMetadataException("Отсутствует обязательное поле 'file' в элементе \"jars\"!", reader);
 			}
 
 			jars.add(new V1ModMetadata.JarEntry(file));
@@ -373,7 +373,7 @@ final class V1ModMetadataParser {
 
 	private static void readMixinConfigs(List<ParseWarning> warnings, JsonReader reader, List<V1ModMetadata.MixinEntry> mixins) throws IOException, ParseMetadataException {
 		if (reader.peek() != JsonToken.BEGIN_ARRAY) {
-			throw new ParseMetadataException("Mixin configs must be in an array", reader);
+			throw new ParseMetadataException("Значение \"mixins\" должно быть массивом", reader);
 		}
 
 		reader.beginArray();
@@ -400,13 +400,13 @@ final class V1ModMetadataParser {
 						break;
 					case "config":
 						if (reader.peek() != JsonToken.STRING) {
-							throw new ParseMetadataException("Value of \"config\" must be a string", reader);
+							throw new ParseMetadataException("Значение \"config\" должно быть строкой", reader);
 						}
 
 						config = reader.nextString();
 						break;
 					default:
-						warnings.add(new ParseWarning(reader.getLineNumber(), reader.getColumn(), key, "Invalid entry in mixin config entry"));
+						warnings.add(new ParseWarning(reader.getLineNumber(), reader.getColumn(), key, "Неподдерживаемое поле в элементе \"mixins\""));
 						reader.skipValue();
 					}
 				}
@@ -418,13 +418,13 @@ final class V1ModMetadataParser {
 				}
 
 				if (config == null) {
-					throw new ParseMetadataException.MissingField("Missing mandatory key 'config' in mixin entry!");
+					throw new ParseMetadataException.MissingField("'config' в элементе \"mixins\"");
 				}
 
 				mixins.add(new V1ModMetadata.MixinEntry(config, environment));
 				break;
 			default:
-				warnings.add(new ParseWarning(reader.getLineNumber(), reader.getColumn(), "Invalid mixin entry type"));
+				warnings.add(new ParseWarning(reader.getLineNumber(), reader.getColumn(), "Недопустимый тип элемента \"mixins\""));
 				reader.skipValue();
 				break;
 			}
@@ -435,7 +435,7 @@ final class V1ModMetadataParser {
 
 	private static void readDependenciesContainer(JsonReader reader, ModDependency.Kind kind, List<ModDependency> out) throws IOException, ParseMetadataException {
 		if (reader.peek() != JsonToken.BEGIN_OBJECT) {
-			throw new ParseMetadataException("Dependency container must be an object!", reader);
+			throw new ParseMetadataException("Контейнер зависимостей должен быть объектом!", reader);
 		}
 
 		reader.beginObject();
@@ -453,7 +453,7 @@ final class V1ModMetadataParser {
 
 				while (reader.hasNext()) {
 					if (reader.peek() != JsonToken.STRING) {
-						throw new ParseMetadataException("Dependency version range array must only contain string values", reader);
+						throw new ParseMetadataException("Массив диапазонов версий зависимости должен содержать только строки", reader);
 					}
 
 					matcherStringList.add(reader.nextString());
@@ -462,7 +462,7 @@ final class V1ModMetadataParser {
 				reader.endArray();
 				break;
 			default:
-				throw new ParseMetadataException("Dependency version range must be a string or string array!", reader);
+				throw new ParseMetadataException("Диапазон версий зависимости должен быть строкой или массивом строк!", reader);
 			}
 
 			try {
@@ -477,7 +477,7 @@ final class V1ModMetadataParser {
 
 	private static void readPeople(List<ParseWarning> warnings, JsonReader reader, List<Person> people) throws IOException, ParseMetadataException {
 		if (reader.peek() != JsonToken.BEGIN_ARRAY) {
-			throw new ParseMetadataException("List of people must be an array", reader);
+			throw new ParseMetadataException("Список людей (authors/contributors) должен быть массивом", reader);
 		}
 
 		reader.beginArray();
@@ -501,7 +501,7 @@ final class V1ModMetadataParser {
 					switch (key) {
 					case "name":
 						if (reader.peek() != JsonToken.STRING) {
-							throw new ParseMetadataException("Name of person in dependency container must be a string", reader);
+							throw new ParseMetadataException("Имя человека в списке authors/contributors должно быть строкой", reader);
 						}
 
 						personName = reader.nextString();
@@ -512,7 +512,7 @@ final class V1ModMetadataParser {
 						break;
 					default:
 						// Ignore unsupported keys
-						warnings.add(new ParseWarning(reader.getLineNumber(), reader.getColumn(), key, "Invalid entry in person"));
+						warnings.add(new ParseWarning(reader.getLineNumber(), reader.getColumn(), key, "Неподдерживаемое поле в записи человека"));
 						reader.skipValue();
 					}
 				}
@@ -520,7 +520,7 @@ final class V1ModMetadataParser {
 				reader.endObject();
 
 				if (personName == null) {
-					throw new ParseMetadataException.MissingField("Person object must have a 'name' field!");
+					throw new ParseMetadataException.MissingField("'name' в записи человека (authors/contributors)");
 				}
 
 				if (contactInformation == null) {
@@ -530,7 +530,7 @@ final class V1ModMetadataParser {
 				people.add(new ContactInfoBackedPerson(personName, contactInformation));
 				break;
 			default:
-				throw new ParseMetadataException("Person type must be an object or string!", reader);
+				throw new ParseMetadataException("Запись человека должна быть объектом или строкой!", reader);
 			}
 		}
 
@@ -539,7 +539,7 @@ final class V1ModMetadataParser {
 
 	private static ContactInformation readContactInfo(JsonReader reader) throws IOException, ParseMetadataException {
 		if (reader.peek() != JsonToken.BEGIN_OBJECT) {
-			throw new ParseMetadataException("Contact info must in an object", reader);
+			throw new ParseMetadataException("Значение \"contact\" должно быть объектом", reader);
 		}
 
 		reader.beginObject();
@@ -550,7 +550,7 @@ final class V1ModMetadataParser {
 			final String key = reader.nextName();
 
 			if (reader.peek() != JsonToken.STRING) {
-				throw new ParseMetadataException("Contact information entries must be a string", reader);
+				throw new ParseMetadataException("Значения в \"contact\" должны быть строками", reader);
 			}
 
 			map.put(key, reader.nextString());
@@ -572,7 +572,7 @@ final class V1ModMetadataParser {
 
 			while (reader.hasNext()) {
 				if (reader.peek() != JsonToken.STRING) {
-					throw new ParseMetadataException("List of licenses must only contain strings", reader);
+					throw new ParseMetadataException("Список лицензий должен содержать только строки", reader);
 				}
 
 				license.add(reader.nextString());
@@ -581,7 +581,7 @@ final class V1ModMetadataParser {
 			reader.endArray();
 			break;
 		default:
-			throw new ParseMetadataException("License must be a string or array of strings!", reader);
+			throw new ParseMetadataException("Значение \"license\" должно быть строкой или массивом строк!", reader);
 		}
 	}
 
@@ -602,15 +602,15 @@ final class V1ModMetadataParser {
 				try {
 					size = Integer.parseInt(key);
 				} catch (NumberFormatException e) {
-					throw new ParseMetadataException("Could not parse icon size '" + key + "'!", e);
+					throw new ParseMetadataException("Не удалось разобрать размер иконки '" + key + "'!", e);
 				}
 
 				if (size < 1) {
-					throw new ParseMetadataException("Size must be positive!", reader);
+					throw new ParseMetadataException("Размер иконки должен быть положительным!", reader);
 				}
 
 				if (reader.peek() != JsonToken.STRING) {
-					throw new ParseMetadataException("Icon path must be a string", reader);
+					throw new ParseMetadataException("Путь к иконке должен быть строкой", reader);
 				}
 
 				iconMap.put(size, reader.nextString());
@@ -619,18 +619,18 @@ final class V1ModMetadataParser {
 			reader.endObject();
 
 			if (iconMap.isEmpty()) {
-				throw new ParseMetadataException("Icon object must not be empty!", reader);
+				throw new ParseMetadataException("Объект \"icon\" не должен быть пустым!", reader);
 			}
 
 			return new V1ModMetadata.MapEntry(iconMap);
 		default:
-			throw new ParseMetadataException("Icon entry must be an object or string!", reader);
+			throw new ParseMetadataException("Значение \"icon\" должно быть объектом или строкой!", reader);
 		}
 	}
 
 	private static void readLanguageAdapters(JsonReader reader, Map<String, String> languageAdapters) throws IOException, ParseMetadataException {
 		if (reader.peek() != JsonToken.BEGIN_OBJECT) {
-			throw new ParseMetadataException("Language adapters must be in an object", reader);
+			throw new ParseMetadataException("Значение \"languageAdapters\" должно быть объектом", reader);
 		}
 
 		reader.beginObject();
@@ -639,7 +639,7 @@ final class V1ModMetadataParser {
 			final String adapter = reader.nextName();
 
 			if (reader.peek() != JsonToken.STRING) {
-				throw new ParseMetadataException("Value of language adapter entry must be a string", reader);
+				throw new ParseMetadataException("Значение записи language adapter должно быть строкой", reader);
 			}
 
 			languageAdapters.put(adapter, reader.nextString());
@@ -650,7 +650,7 @@ final class V1ModMetadataParser {
 
 	private static void readCustomValues(JsonReader reader, Map<String, CustomValue> customValues) throws IOException, ParseMetadataException {
 		if (reader.peek() != JsonToken.BEGIN_OBJECT) {
-			throw new ParseMetadataException("Custom values must be in an object!", reader);
+			throw new ParseMetadataException("Значение \"custom\" должно быть объектом!", reader);
 		}
 
 		reader.beginObject();

@@ -41,7 +41,7 @@ public final class MetadataVerifier {
 				MetadataVerifier.verify(mod.getMetadata(), isDevelopment);
 			} catch (ParseMetadataException e) {
 				e.setModPaths(mod.getLocalPath(), Collections.emptyList());
-				throw new RuntimeException("Invalid mod metadata", e);
+				throw new RuntimeException("Недопустимые метаданные мода", e);
 			}
 		}
 
@@ -49,10 +49,10 @@ public final class MetadataVerifier {
 	}
 
 	static void verify(LoaderModMetadata metadata, boolean isDevelopment) throws ParseMetadataException {
-		checkModId(metadata.getId(), "mod id");
+		checkModId(metadata.getId(), "id мода");
 
 		for (String providesDecl : metadata.getProvides()) {
-			checkModId(providesDecl, "provides declaration");
+			checkModId(providesDecl, "запись \"provides\"");
 		}
 
 		// TODO: verify mod id and version decls in deps
@@ -90,18 +90,18 @@ public final class MetadataVerifier {
 
 		// A more useful error list for MOD_ID_PATTERN
 		if (id.isEmpty()) {
-			errorList.add("is empty!");
+			errorList.add("пуст!");
 		} else {
 			if (id.length() == 1) {
-				errorList.add("is only a single character! (It must be at least 2 characters long)!");
+				errorList.add("состоит из одного символа! (должно быть не менее 2 символов)!");
 			} else if (id.length() > 64) {
-				errorList.add("has more than 64 characters!");
+				errorList.add("содержит более 64 символов!");
 			}
 
 			char first = id.charAt(0);
 
 			if (first < 'a' || first > 'z') {
-				errorList.add("starts with an invalid character '" + first + "' (it must be a lowercase a-z - uppercase isn't allowed anywhere in the ID)");
+				errorList.add("начинается с недопустимого символа '" + first + "' (должна быть строчная латинская буква a-z — заглавные буквы в id не допускаются)");
 			}
 
 			Set<Character> invalidChars = null;
@@ -121,7 +121,7 @@ public final class MetadataVerifier {
 			}
 
 			if (invalidChars != null) {
-				StringBuilder error = new StringBuilder("contains invalid characters: ");
+				StringBuilder error = new StringBuilder("содержит недопустимые символы: ");
 				error.append(invalidChars.stream().map(value -> "'" + value + "'").collect(Collectors.joining(", ")));
 				errorList.add(error.append("!").toString());
 			}
@@ -132,13 +132,13 @@ public final class MetadataVerifier {
 		StringWriter sw = new StringWriter();
 
 		try (PrintWriter pw = new PrintWriter(sw)) {
-			pw.printf("Invalid %s %s:", name, id);
+			pw.printf("Недопустимый %s \"%s\":", name, id);
 
 			if (errorList.size() == 1) {
-				pw.printf(" It %s", errorList.get(0));
+				pw.printf(" Он %s", errorList.get(0));
 			} else {
 				for (String error : errorList) {
-					pw.printf("\n\t- It %s", error);
+					pw.printf("\n\t- Он %s", error);
 				}
 			}
 		}
