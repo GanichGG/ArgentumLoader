@@ -16,37 +16,50 @@
 
 package net.fabricmc.installer.anchor;
 
+import java.awt.BorderLayout;
 import java.awt.GraphicsEnvironment;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.CodeSource;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 
+import javax.swing.BorderFactory;
+import javax.swing.JComboBox;
+import javax.swing.JLabel;
 import javax.swing.JOptionPane;
+import javax.swing.JPanel;
 
 /**
  * Одноразовый установщик ArgentumLoader ("якорь").
  *
- * <p>Не запускает игру и ничего сам не скачивает. Запускается вручную из папки клиента
- * (той же, куда указывает рабочая директория самого Minecraft — .minecraft или папка
- * инстанса в MultiMC/Prism), кладёт туда собственный jar лоадера и пишет один
- * version-профиль. Все сторонние библиотеки (Mixin, ASM) после этого штатно скачивает
- * сам лаунчер Minecraft при первом запуске этого профиля — так же, как он скачивает
- * библиотеки для ванильной игры.
+ * <p>Не запускает игру и ничего сам не скачивает. Игрок кладёт этот jar прямо в папку
+ * своего клиента (.minecraft или папку инстанса в MultiMC/Prism) и запускает его оттуда
+ * один раз. Якорь сам определяет, в какой папке он лежит (а не полагается на текущую
+ * рабочую директорию процесса — при запуске двойным кликом на Windows она иногда
+ * оказывается System32, а не папкой самого файла), кладёт туда собственный jar лоадера
+ * и пишет один version-профиль. Все сторонние библиотеки (Mixin, ASM) после этого
+ * штатно скачивает сам лаунчер Minecraft при первом запуске этого профиля — так же, как
+ * он скачивает библиотеки для ванильной игры.
  */
 public final class AnchorMain {
 	private static final String LIBRARIES_RESOURCE = "/anchor-libraries.properties";
 	private static final String LOADER_JAR_RESOURCE = "/argentumloader.jar";
 
-	// Обычный запуск (двойной клик) — окно ввода версии и окно с результатом.
+	// Пока целимся только на одну версию; список расширим по мере тестирования на других.
+	private static final String[] SUPPORTED_VERSIONS = {"1.21.1"};
+
+	// Обычный запуск (двойной клик) — окно выбора версии и окно с результатом.
 	// Если передан аргумент командной строки или окна недоступны (headless), используется он
 	// вместо диалога, а результат печатается в консоль — этим путём проходят автотесты.
 	private static final boolean HEADLESS = GraphicsEnvironment.isHeadless();
@@ -56,19 +69,19 @@ public final class AnchorMain {
 
 		try {
 			Path profilePath = install(presetVersion);
-			String message = "ArgentumLoader установлен!\n\n"
-					+ "Профиль записан в:\n" + profilePath + "\n\n"
-					+ "Теперь выберите профиль ArgentumLoader в лаунчере Minecraft и нажмите «Играть» —\n"
-					+ "недостающие библиотеки лаунчер скачает сам.";
+			String message = "<html><b>ArgentumLoader установлен!</b><br><br>"
+					+ "Профиль записан в:<br>" + escapeHtml(profilePath.toString()) + "<br><br>"
+					+ "Теперь выберите профиль <b>ArgentumLoader</b> в лаунчере Minecraft и нажмите «Играть» —<br>"
+					+ "недостающие библиотеки лаунчер скачает сам.</html>";
 
 			if (HEADLESS) {
-				System.out.println(message);
+				System.out.println(profilePath);
 			} else {
 				JOptionPane.showMessageDialog(null, message, "ArgentumLoader", JOptionPane.INFORMATION_MESSAGE);
 			}
 		} catch (Exception e) {
 			e.printStackTrace();
-			String message = "Не удалось установить ArgentumLoader:\n" + e;
+			String message = "<html><b>Не удалось установить ArgentumLoader</b><br><br>" + escapeHtml(String.valueOf(e)) + "</html>";
 
 			if (!HEADLESS) {
 				JOptionPane.showMessageDialog(null, message, "ArgentumLoader", JOptionPane.ERROR_MESSAGE);
@@ -79,26 +92,28 @@ public final class AnchorMain {
 	}
 
 	private static Path install(String presetVersion) throws IOException {
-		Path gameDir = Paths.get("").toAbsolutePath();
+		Path gameDir = findGameDir();
 
 		String mcVersion = presetVersion;
 
 		if (mcVersion == null) {
 			if (HEADLESS) {
-				throw new IOException("нет окна для ввода версии — укажите версию Minecraft первым аргументом командной строки");
+				throw new IOException("нет окна для выбора версии — укажите версию Minecraft первым аргументом командной строки");
 			}
 
-			mcVersion = JOptionPane.showInputDialog(null,
-					"В какую папку кладём:\n" + gameDir + "\n\n"
-							+ "Версия Minecraft, для которой ставим ArgentumLoader (например 1.21.1):",
-					"ArgentumLoader — установка", JOptionPane.QUESTION_MESSAGE);
-		}
+			mcVersion = askVersion(gameDir);
 
-		if (mcVersion == null || mcVersion.trim().isEmpty()) {
-			throw new IOException("версия Minecraft не указана, установка отменена");
+			if (mcVersion == null) {
+				throw new IOException("установка отменена");
+			}
 		}
 
 		mcVersion = mcVersion.trim();
+
+		if (!isSupported(mcVersion)) {
+			throw new IOException("версия " + mcVersion + " пока не поддерживается ArgentumLoader (сейчас доступна: "
+					+ String.join(", ", SUPPORTED_VERSIONS) + ")");
+		}
 
 		Properties props = loadLibraryList();
 
@@ -121,6 +136,55 @@ public final class AnchorMain {
 		Files.write(profileJson, json.getBytes(StandardCharsets.UTF_8));
 
 		return profileJson;
+	}
+
+	/**
+	 * Папка, в которой физически лежит сам anchor-jar — а не рабочая директория процесса
+	 * (на Windows при запуске двойным кликом она может оказаться System32).
+	 */
+	private static Path findGameDir() {
+		try {
+			CodeSource codeSource = AnchorMain.class.getProtectionDomain().getCodeSource();
+
+			if (codeSource != null) {
+				Path jarPath = Paths.get(codeSource.getLocation().toURI());
+
+				if (Files.isRegularFile(jarPath)) {
+					return jarPath.getParent().toAbsolutePath();
+				}
+			}
+		} catch (URISyntaxException e) {
+			// падаем на fallback ниже
+		}
+
+		// Например, при запуске не из jar (dev-окружение) — берём рабочую директорию.
+		return Paths.get("").toAbsolutePath();
+	}
+
+	private static String askVersion(Path gameDir) {
+		JComboBox<String> versionBox = new JComboBox<>(SUPPORTED_VERSIONS);
+		versionBox.setSelectedIndex(0);
+
+		JLabel info = new JLabel("<html>Папка установки:<br><b>" + escapeHtml(gameDir.toString()) + "</b><br><br>"
+				+ "Версия Minecraft:</html>");
+		info.setBorder(BorderFactory.createEmptyBorder(0, 0, 8, 0));
+
+		JPanel panel = new JPanel(new BorderLayout());
+		panel.add(info, BorderLayout.NORTH);
+		panel.add(versionBox, BorderLayout.CENTER);
+
+		int result = JOptionPane.showConfirmDialog(null, panel, "ArgentumLoader — установка",
+				JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
+
+		if (result != JOptionPane.OK_OPTION) {
+			return null;
+		}
+
+		return (String) versionBox.getSelectedItem();
+	}
+
+	private static boolean isSupported(String mcVersion) {
+		return Arrays.asList(SUPPORTED_VERSIONS).contains(mcVersion);
 	}
 
 	private static Properties loadLibraryList() throws IOException {
@@ -213,6 +277,10 @@ public final class AnchorMain {
 
 	private static String escape(String s) {
 		return s.replace("\\", "\\\\").replace("\"", "\\\"");
+	}
+
+	private static String escapeHtml(String s) {
+		return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
 	}
 
 	private AnchorMain() {
