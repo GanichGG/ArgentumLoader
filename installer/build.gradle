@@ -119,8 +119,8 @@ graalvmNative {
 			// заголовках Windows SDK (ucrt\memory.h и т.п.) и валит сборку с C2220 из-за /WX.
 			// Явно просим UTF-8 у компилятора вместо угадывания по системной локали.
 			buildArgs.add('-H:CCompilerOption=/utf-8')
-			// TODO: значок для .exe — опция -H:WindowsIconPath недоступна в GraalVM Community,
-			// нужен либо Oracle GraalVM, либо пост-обработка ресурсов exe отдельным инструментом.
+			// Иконку -H:WindowsIconPath в GraalVM Community не поддерживает — дописываем её
+			// в уже готовый .exe отдельным шагом (см. setIcon ниже, scripts/set_icon.py).
 		}
 	}
 }
@@ -135,6 +135,23 @@ tasks.named('nativeCompile') {
 		nativeLibNames.each { name -> new File(outDir, name).delete() }
 		outDir.listFiles()?.findAll { it.name.endsWith('.args') }?.each { it.delete() }
 	}
+	finalizedBy 'setIcon'
+}
+
+// GraalVM Community не умеет проставить иконку .exe на этапе сборки (-H:WindowsIconPath
+// недоступна) — дописываем её в уже собранный файл через win32-API (требует `pip install
+// pywin32` на машине сборки; тот же приём использует, например, утилита rcedit).
+tasks.register('setIcon', Exec) {
+	def exeFile = layout.buildDirectory.file('native/nativeCompile/ArgentumAnchor.exe')
+	def iconFile = project.file('src/main/resources/icon/argentum.ico')
+	def script = project.file('scripts/set_icon.py')
+
+	inputs.file(iconFile)
+	inputs.file(script)
+	outputs.file(exeFile)
+	outputs.upToDateWhen { false } // meняет уже собранный exe, а не создаёт новый — пусть перезапускается всегда
+
+	commandLine('python', script.absolutePath, exeFile.get().asFile.absolutePath, iconFile.absolutePath)
 }
 
 // Портативный .exe со встроенной Java — чтобы якорь работал даже у игроков без
