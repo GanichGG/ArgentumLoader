@@ -207,8 +207,25 @@ public final class AnchorMain {
 			// падаем на fallback ниже
 		}
 
-		// Например, при запуске не из jar (dev-окружение) — берём рабочую директорию, чистить нечего.
+		// Под GraalVM native-image classSource() возвращает null — нет реальной загрузки из
+		// jar в рантайме. Определяем расположение по самому процессу ОС (не зависит от cwd).
+		Path exePath = currentExecutablePath();
+
+		if (exePath != null) {
+			return new InstallLocation(exePath.getParent().toAbsolutePath(), Collections.singletonList(exePath));
+		}
+
+		// Например, при запуске не из jar и не из native-exe (dev-окружение) — берём рабочую
+		// директорию, чистить нечего.
 		return new InstallLocation(Paths.get("").toAbsolutePath(), Collections.emptyList());
+	}
+
+	private static Path currentExecutablePath() {
+		try {
+			return ProcessHandle.current().info().command().map(Paths::get).orElse(null);
+		} catch (Exception e) {
+			return null;
+		}
 	}
 
 	private static Path findSiblingExe(Path root) {

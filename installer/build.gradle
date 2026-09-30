@@ -1,10 +1,15 @@
 plugins {
 	id 'java'
+	id 'org.graalvm.buildtools.native' version '0.10.3'
 }
 
+// Якорь — отдельный автономный инструмент (не грузится в игру), поэтому в отличие от
+// самого loader'а его ничто не обязывает к совместимости с Java 8.
 java {
-	sourceCompatibility = JavaVersion.VERSION_1_8
-	targetCompatibility = JavaVersion.VERSION_1_8
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+		vendor = JvmVendorSpec.matching('GraalVM Community')
+	}
 }
 
 def generatedResources = layout.buildDirectory.dir('generated/resources')
@@ -57,6 +62,27 @@ jar {
 	archiveBaseName = 'argentum-anchor'
 	manifest {
 		attributes 'Main-Class': 'net.fabricmc.installer.anchor.AnchorMain'
+	}
+}
+
+// Настоящий один .exe без отдельной папки с рантаймом рядом — GraalVM native-image
+// компилирует якорь в нативный бинарник. Собирается: ./gradlew :installer:nativeCompile
+// Результат: installer/build/native/nativeCompile/ArgentumAnchor.exe
+graalvmNative {
+	toolchainDetection = true
+	binaries {
+		main {
+			imageName = 'ArgentumAnchor'
+			mainClass = 'net.fabricmc.installer.anchor.AnchorMain'
+			sharedLibrary = false
+			buildArgs.add('--no-fallback')
+			// На системах с не-английской локалью cl.exe иногда ошибочно детектит BOM в
+			// заголовках Windows SDK (ucrt\memory.h и т.п.) и валит сборку с C2220 из-за /WX.
+			// Явно просим UTF-8 у компилятора вместо угадывания по системной локали.
+			buildArgs.add('-H:CCompilerOption=/utf-8')
+			// TODO: значок для .exe — опция -H:WindowsIconPath недоступна в GraalVM Community,
+			// нужен либо Oracle GraalVM, либо пост-обработка ресурсов exe отдельным инструментом.
+		}
 	}
 }
 
