@@ -12,6 +12,18 @@ java {
 	}
 }
 
+// @TargetClass/@Substitute (см. Target_sun_awt_Win32FontManager) живут во внутреннем
+// svm.jar сборщика native-image, а не в публичном org.graalvm.sdk — берём его прямо из
+// уже скачанного GraalVM, отдельного maven-координата для него в Community-редакции нет.
+dependencies {
+	def graalvm = javaToolchains.launcherFor {
+		languageVersion = JavaLanguageVersion.of(21)
+		vendor = JvmVendorSpec.matching('GraalVM Community')
+	}.get()
+
+	compileOnly files(graalvm.metadata.installationPath.file('lib/svm/builder/svm.jar'))
+}
+
 def generatedResources = layout.buildDirectory.dir('generated/resources')
 
 // Собственный jar лоадера не опубликован на публичном maven, поэтому якорь
@@ -22,6 +34,21 @@ tasks.register('copyLoaderJar', Copy) {
 	from rootProject.tasks.named('finalJar').get().archiveFile
 	into generatedResources
 	rename { 'argentumloader.jar' }
+}
+
+// Под native-image свойство java.home не указывает на настоящую установку JDK, поэтому
+// штатный поиск конфигурации шрифтов (<java.home>/lib/fontconfig.properties) ничего не
+// находит и AWT падает при первом обращении к шрифту. Берём готовый файл из GraalVM и
+// кладём как ресурс — в рантайме извлекаем и указываем на него через sun.awt.fontconfig.
+tasks.register('copyFontConfig', Copy) {
+	def graalvm = javaToolchains.launcherFor {
+		languageVersion = JavaLanguageVersion.of(21)
+		vendor = JvmVendorSpec.matching('GraalVM Community')
+	}.get()
+
+	from(graalvm.metadata.installationPath.file('lib/fontconfig.properties.src'))
+	into generatedResources
+	rename { 'fontconfig.properties' }
 }
 
 tasks.register('generateAnchorLibraries') {
@@ -95,7 +122,7 @@ tasks.register('copyNativeLibs') {
 }
 
 sourceSets.main.resources.srcDir generatedResources
-processResources.dependsOn copyLoaderJar, generateAnchorLibraries, copyNativeLibs
+processResources.dependsOn copyLoaderJar, generateAnchorLibraries, copyNativeLibs, copyFontConfig
 
 jar {
 	archiveBaseName = 'argentum-anchor'
@@ -121,6 +148,11 @@ graalvmNative {
 			buildArgs.add('-H:CCompilerOption=/utf-8')
 			// Иконку -H:WindowsIconPath в GraalVM Community не поддерживает — дописываем её
 			// в уже готовый .exe отдельным шагом (см. setIcon ниже, scripts/set_icon.py).
+			// По умолчанию GraalVM инициализирует классы на этапе СБОРКИ ради скорости — но
+			// шрифты/кодировки/AWT-тулкит должны инициализироваться на целевой машине в
+			// рантайме, а не "заморозиться" в состоянии машины сборки. Без этого всплывают
+			// разрозненные ошибки (fontconfig, platform encoding и т.п.) одна за другой.
+			buildArgs.add('--initialize-at-run-time=java.desktop')
 		}
 	}
 }

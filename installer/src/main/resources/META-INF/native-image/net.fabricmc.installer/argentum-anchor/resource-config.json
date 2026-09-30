@@ -1,0 +1,34 @@
+{
+  "resources":{
+  "includes":[{
+    "pattern":"\\QMETA-INF/services/java.awt.im.spi.InputMethodDescriptor\\E"
+  }, {
+    "pattern":"\\QMETA-INF/services/java.lang.System$LoggerFinder\\E"
+  }, {
+    "pattern":"\\QMETA-INF/services/java.time.zone.ZoneRulesProvider\\E"
+  }, {
+    "pattern":"\\Qanchor-libraries.properties\\E"
+  }, {
+    "pattern":"\\Qargentumloader.jar\\E"
+  }, {
+    "pattern":"java.base:\\Qsun/text/resources/LineBreakIteratorData\\E"
+  }, {
+    "pattern":"java.desktop:\\Qjavax/swing/plaf/metal/icons/ocean/info.png\\E"
+  }, {
+    "pattern":"java.desktop:\\Qjavax/swing/plaf/metal/icons/ocean/question.png\\E"
+  }, {
+    "pattern":"java.desktop:\\Qjavax/swing/text/html/default.css\\E"
+  }, {
+    "pattern":"java.desktop:\\Qjavax/swing/text/html/parser/html32.bdtd\\E"
+  }]},
+  "bundles":[{
+    "name":"com.sun.swing.internal.plaf.basic.resources.basic",
+    "classNames":["com.sun.swing.internal.plaf.basic.resources.basic"]
+  }, {
+    "name":"com.sun.swing.internal.plaf.metal.resources.metal",
+    "classNames":["com.sun.swing.internal.plaf.metal.resources.metal"]
+  }, {
+    "name":"sun.awt.resources.awt",
+    "classNames":["sun.awt.resources.awt"]
+  }]
+}

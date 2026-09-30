@@ -70,7 +70,16 @@ public final class AnchorMain {
 	};
 
 	static {
+		// Под GraalVM native-image свойство java.home не задано (нет традиционной установки
+		// JDK рядом). Само по себе это не страшно, но без него шрифтовая подсистема AWT даже
+		// не пытается искать fontconfig.properties — задаём заглушку, чтобы дошло до места,
+		// где реальный путь уже берётся из sun.awt.fontconfig (см. extractFontConfigIfNeeded).
+		if (System.getProperty("java.home") == null) {
+			System.setProperty("java.home", ".");
+		}
+
 		extractNativeLibsIfNeeded();
+		extractFontConfigIfNeeded();
 	}
 
 	// Пока целимся только на одну версию; список расширим по мере тестирования на других.
@@ -99,6 +108,11 @@ public final class AnchorMain {
 				JOptionPane.showMessageDialog(null, message, "ArgentumLoader", JOptionPane.INFORMATION_MESSAGE);
 				scheduleCleanup(result.leftovers);
 			}
+
+			// Swing поднимает нефоновый поток обработки событий (EDT), который сам по себе не
+			// даёт JVM завершиться даже после выхода из main() — без явного exit процесс висел
+			// бы в диспетчере задач и после закрытия всех окон.
+			System.exit(0);
 		} catch (Exception e) {
 			e.printStackTrace();
 			String message = "<html><b>Не удалось установить ArgentumLoader</b><br><br>" + escapeHtml(String.valueOf(e)) + "</html>";
@@ -186,6 +200,32 @@ public final class AnchorMain {
 	 * его собственных файлов, которые после успешной установки становятся не нужны.
 	 */
 	private static InstallLocation findInstallLocation() {
+		// Под native-image getProtectionDomain().getCodeSource() не возвращает null, как можно
+		// было бы ожидать (нет "настоящей" загрузки из jar в рантайме) — он указывает прямо на
+		// сам .exe. Из-за этого ветка ниже, рассчитанная на обычный jar/app-image, раньше молча
+		// подхватывала exe как "jar" и получала список из одного файла вместо самого exe плюс
+		// всех распакованных рядом библиотек. Поэтому для native-image всегда используем путь
+		// самого процесса ОС напрямую, а ветку с CodeSource — только для обычного jar-запуска.
+		if (isNativeImage()) {
+			Path exePath = currentExecutablePath();
+
+			if (exePath != null) {
+				Path dir = exePath.getParent().toAbsolutePath();
+				List<Path> leftovers = new ArrayList<>();
+				leftovers.add(exePath);
+
+				for (String lib : NATIVE_LIBS) {
+					Path libPath = dir.resolve(lib);
+					if (Files.exists(libPath)) leftovers.add(libPath);
+				}
+
+				Path fontConfigPath = dir.resolve("fontconfig.properties");
+				if (Files.exists(fontConfigPath)) leftovers.add(fontConfigPath);
+
+				return new InstallLocation(dir, leftovers);
+			}
+		}
+
 		try {
 			CodeSource codeSource = AnchorMain.class.getProtectionDomain().getCodeSource();
 
@@ -221,21 +261,10 @@ public final class AnchorMain {
 			// падаем на fallback ниже
 		}
 
-		// Под GraalVM native-image classSource() возвращает null — нет реальной загрузки из
-		// jar в рантайме. Определяем расположение по самому процессу ОС (не зависит от cwd).
 		Path exePath = currentExecutablePath();
 
 		if (exePath != null) {
-			Path dir = exePath.getParent().toAbsolutePath();
-			List<Path> leftovers = new ArrayList<>();
-			leftovers.add(exePath);
-
-			for (String lib : NATIVE_LIBS) {
-				Path libPath = dir.resolve(lib);
-				if (Files.exists(libPath)) leftovers.add(libPath);
-			}
-
-			return new InstallLocation(dir, leftovers);
+			return new InstallLocation(exePath.getParent().toAbsolutePath(), Collections.singletonList(exePath));
 		}
 
 		// Например, при запуске не из jar и не из native-exe (dev-окружение) — берём рабочую
@@ -274,6 +303,36 @@ public final class AnchorMain {
 		extractOne(dir, "jawt.dll", AnchorMain.class.getResourceAsStream("/jawt.dll.bin"));
 		extractOne(dir, "jvm.dll", AnchorMain.class.getResourceAsStream("/jvm.dll.bin"));
 		extractOne(dir, "lcms.dll", AnchorMain.class.getResourceAsStream("/lcms.dll.bin"));
+	}
+
+	/**
+	 * Кладёт рядом с .exe настоящий fontconfig.properties (взят из GraalVM при сборке, см.
+	 * installer/build.gradle, copyFontConfig) и указывает на него через sun.awt.fontconfig —
+	 * штатный способ переопределить путь к конфигу шрифтов в обход поиска по java.home.
+	 */
+	private static void extractFontConfigIfNeeded() {
+		if (!isNativeImage()) return;
+
+		Path exePath = currentExecutablePath();
+		if (exePath == null) return;
+
+		Path dir = exePath.getParent();
+		if (dir == null) return;
+
+		Path target = dir.resolve("fontconfig.properties");
+
+		if (!Files.exists(target)) {
+			try (InputStream is = AnchorMain.class.getResourceAsStream("/fontconfig.properties")) {
+				if (is == null) return; // не встроено — AWT попробует найти сам, best effort
+
+				Files.copy(is, target);
+			} catch (IOException e) {
+				e.printStackTrace();
+				return;
+			}
+		}
+
+		System.setProperty("sun.awt.fontconfig", target.toString());
 	}
 
 	private static void extractOne(Path dir, String targetName, InputStream is) {
@@ -328,15 +387,26 @@ public final class AnchorMain {
 			return;
 		}
 
-		StringBuilder cmd = new StringBuilder("ping 127.0.0.1 -n 3 > nul");
+		// Некоторые файлы (особенно DLL, которые ещё недавно были загружены процессом) могут
+		// оставаться занятыми чуть дольше, чем сам процесс формально завершается — поэтому не
+		// одна попытка с фиксированной паузой, а несколько попыток подряд с интервалом; del/
+		// rmdir по уже отсутствующему пути просто ничего не делает (ошибка подавлена).
+		// Внутри .bat-файла переменную FOR нужно писать удвоенной (%%i), а не одинарной (%i,
+		// работает только в интерактивной командной строке) — иначе цикл не выполняется.
+		StringBuilder cmd = new StringBuilder("for /l %%i in (1,1,10) do (");
 
 		for (Path p : leftovers) {
 			String quoted = "\"" + p.toAbsolutePath() + "\"";
-			cmd.append(" & ").append(Files.isDirectory(p) ? "rmdir /s /q " : "del /f /q ").append(quoted);
+			cmd.append(Files.isDirectory(p) ? "rmdir /s /q " : "del /f /q ").append(quoted).append(" >nul 2>nul & ");
 		}
 
+		cmd.append("ping 127.0.0.1 -n 2 >nul)");
+
 		try {
-			new ProcessBuilder("cmd", "/c", cmd.toString())
+			Path script = Files.createTempFile("argentum-cleanup", ".bat");
+			Files.write(script, ("@echo off\r\n" + cmd).getBytes(StandardCharsets.UTF_8));
+
+			new ProcessBuilder("cmd", "/c", script.toString())
 					.redirectOutput(ProcessBuilder.Redirect.DISCARD)
 					.redirectError(ProcessBuilder.Redirect.DISCARD)
 					.start();
