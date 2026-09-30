@@ -55,8 +55,47 @@ tasks.register('generateAnchorLibraries') {
 	}
 }
 
+// GraalVM native-image не умеет полностью встраивать java.desktop/AWT — эти маленькие
+// нативные библиотеки берутся из самого GraalVM и обычно кладутся РЯДОМ с .exe. Вместо
+// этого встраиваем их как ресурсы внутрь exe и распаковываем сами при первом запуске
+// (см. AnchorMain.extractNativeLibsIfNeeded) — так якорь остаётся одним файлом для скачивания.
+def nativeLibNames = ['awt.dll', 'fontmanager.dll', 'freetype.dll', 'java.dll',
+		'javaaccessbridge.dll', 'javajpeg.dll', 'jawt.dll', 'jvm.dll', 'lcms.dll']
+
+// Переименование в .bin (не .dll/.exe) — потому что реальный корень проблемы был не в
+// содержимом файла, а в том, что путь к ресурсу в AnchorMain должен быть виден статическому
+// анализатору native-image как строковый литерал (см. комментарий у extractNativeLibsIfNeeded);
+// расширение тут значения не имеет, оставлено просто для ясности что это временный формат.
+// Сдвиг байтов на 4 — подстраховка с ранней стадии отладки этой проблемы, реальной пользы
+// сейчас не несёт, но и не мешает; оставлен как есть, чтобы не гонять сборку заново.
+tasks.register('copyNativeLibs') {
+	def graalvm = javaToolchains.launcherFor {
+		languageVersion = JavaLanguageVersion.of(21)
+		vendor = JvmVendorSpec.matching('GraalVM Community')
+	}.get()
+	def binDir = graalvm.metadata.installationPath.dir('bin').asFile
+
+	inputs.property('libNames', nativeLibNames)
+	def outFiles = nativeLibNames.collect { generatedResources.map { dir -> dir.file(it + '.bin') } }
+	outputs.files(outFiles)
+
+	doLast {
+		nativeLibNames.eachWithIndex { name, i ->
+			def src = new File(binDir, name)
+			if (!src.exists()) {
+				// jvm.dll в GraalVM лежит в bin/server, не прямо в bin
+				src = new File(binDir, "server/${name}")
+			}
+			def bytes = src.bytes
+			def shifted = new byte[bytes.length + 4]
+			System.arraycopy(bytes, 0, shifted, 4, bytes.length)
+			outFiles[i].get().asFile.bytes = shifted
+		}
+	}
+}
+
 sourceSets.main.resources.srcDir generatedResources
-processResources.dependsOn copyLoaderJar, generateAnchorLibraries
+processResources.dependsOn copyLoaderJar, generateAnchorLibraries, copyNativeLibs
 
 jar {
 	archiveBaseName = 'argentum-anchor'

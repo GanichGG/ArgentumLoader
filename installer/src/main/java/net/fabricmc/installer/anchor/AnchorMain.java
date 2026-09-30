@@ -59,6 +59,20 @@ public final class AnchorMain {
 	private static final String LIBRARIES_RESOURCE = "/anchor-libraries.properties";
 	private static final String LOADER_JAR_RESOURCE = "/argentumloader.jar";
 
+	// AWT/Swing под GraalVM native-image не встраиваются в сам .exe целиком — эти маленькие
+	// нативные библиотеки собраны как встроенные ресурсы (см. installer/build.gradle,
+	// copyNativeLibs) и распаковываются рядом с .exe при самом первом запуске, до того как
+	// что-либо в программе успевает их запросить (см. static-блок ниже и порядок полей: он
+	// должен отработать раньше HEADLESS, иначе Swing попытается загрузить их первым).
+	private static final String[] NATIVE_LIBS = {
+			"awt.dll", "fontmanager.dll", "freetype.dll", "java.dll",
+			"javaaccessbridge.dll", "javajpeg.dll", "jawt.dll", "jvm.dll", "lcms.dll"
+	};
+
+	static {
+		extractNativeLibsIfNeeded();
+	}
+
 	// Пока целимся только на одну версию; список расширим по мере тестирования на других.
 	private static final String[] SUPPORTED_VERSIONS = {"1.21.1"};
 
@@ -212,12 +226,75 @@ public final class AnchorMain {
 		Path exePath = currentExecutablePath();
 
 		if (exePath != null) {
-			return new InstallLocation(exePath.getParent().toAbsolutePath(), Collections.singletonList(exePath));
+			Path dir = exePath.getParent().toAbsolutePath();
+			List<Path> leftovers = new ArrayList<>();
+			leftovers.add(exePath);
+
+			for (String lib : NATIVE_LIBS) {
+				Path libPath = dir.resolve(lib);
+				if (Files.exists(libPath)) leftovers.add(libPath);
+			}
+
+			return new InstallLocation(dir, leftovers);
 		}
 
 		// Например, при запуске не из jar и не из native-exe (dev-окружение) — берём рабочую
 		// директорию, чистить нечего.
 		return new InstallLocation(Paths.get("").toAbsolutePath(), Collections.emptyList());
+	}
+
+	private static boolean isNativeImage() {
+		return "runtime".equals(System.getProperty("org.graalvm.nativeimage.imagecode"));
+	}
+
+	/**
+	 * Кладёт встроенные в .exe AWT/Swing-библиотеки рядом с самим .exe, если их там ещё нет —
+	 * до того как что-либо в программе их запросит (см. порядок static-полей класса). Вне
+	 * native-image (обычный jar) ничего не делает — там эти библиотеки достаёт сама JVM.
+	 */
+	private static void extractNativeLibsIfNeeded() {
+		if (!isNativeImage()) return;
+
+		Path exePath = currentExecutablePath();
+		if (exePath == null) return;
+
+		Path dir = exePath.getParent();
+		if (dir == null) return;
+
+		// GraalVM автоматически включает в образ только те ресурсы, чей путь виден статическому
+		// анализатору как строковый литерал прямо в вызове getResourceAsStream — путь, собранный
+		// динамически (например, в цикле по массиву имён), он не видит и не встраивает. Поэтому
+		// здесь принципиально 9 отдельных вызовов с литеральными путями, а не цикл по NATIVE_LIBS.
+		extractOne(dir, "awt.dll", AnchorMain.class.getResourceAsStream("/awt.dll.bin"));
+		extractOne(dir, "fontmanager.dll", AnchorMain.class.getResourceAsStream("/fontmanager.dll.bin"));
+		extractOne(dir, "freetype.dll", AnchorMain.class.getResourceAsStream("/freetype.dll.bin"));
+		extractOne(dir, "java.dll", AnchorMain.class.getResourceAsStream("/java.dll.bin"));
+		extractOne(dir, "javaaccessbridge.dll", AnchorMain.class.getResourceAsStream("/javaaccessbridge.dll.bin"));
+		extractOne(dir, "javajpeg.dll", AnchorMain.class.getResourceAsStream("/javajpeg.dll.bin"));
+		extractOne(dir, "jawt.dll", AnchorMain.class.getResourceAsStream("/jawt.dll.bin"));
+		extractOne(dir, "jvm.dll", AnchorMain.class.getResourceAsStream("/jvm.dll.bin"));
+		extractOne(dir, "lcms.dll", AnchorMain.class.getResourceAsStream("/lcms.dll.bin"));
+	}
+
+	private static void extractOne(Path dir, String targetName, InputStream is) {
+		try (InputStream stream = is) {
+			if (stream == null) return; // не встроено — пропускаем, а не валим установку
+
+			Path target = dir.resolve(targetName);
+			if (Files.exists(target)) return;
+
+			byte[] shifted = stream.readAllBytes();
+
+			// первые 4 байта — сдвиг, добавленный при упаковке (см. installer/build.gradle,
+			// copyNativeLibs) — историческая подстраховка, оставлена на случай похожих проблем.
+			try (OutputStream os = Files.newOutputStream(target)) {
+				os.write(shifted, 4, shifted.length - 4);
+			}
+		} catch (IOException e) {
+			// самораспаковка — best effort; если что-то не вышло, Windows всё равно
+			// поищет библиотеку по остальным путям (PATH и т.п.)
+			e.printStackTrace();
+		}
 	}
 
 	private static Path currentExecutablePath() {
