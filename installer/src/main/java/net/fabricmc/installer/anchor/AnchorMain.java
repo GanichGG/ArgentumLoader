@@ -36,6 +36,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.swing.BorderFactory;
 import javax.swing.JComboBox;
@@ -95,10 +97,15 @@ public final class AnchorMain {
 
 		try {
 			InstallResult result = install(presetVersion);
-			String message = "<html><b>ArgentumLoader установлен!</b><br><br>"
-					+ "Профиль записан в:<br>" + escapeHtml(result.profilePath.toString()) + "<br><br>"
-					+ "Теперь выберите профиль <b>ArgentumLoader</b> в лаунчере Minecraft и нажмите «Играть» —<br>"
-					+ "недостающие библиотеки лаунчер скачает сам.</html>";
+			String message = result.prismInstance
+					? "<html><b>ArgentumLoader установлен!</b><br><br>"
+							+ "Компонент записан в:<br>" + escapeHtml(result.profilePath.toString()) + "<br><br>"
+							+ "Открой Prism Launcher, зайди в <b>Edit Instance → Version</b> — там уже должен быть<br>"
+							+ "ArgentumLoader. Недостающие библиотеки Prism скачает сам при запуске.</html>"
+					: "<html><b>ArgentumLoader установлен!</b><br><br>"
+							+ "Профиль записан в:<br>" + escapeHtml(result.profilePath.toString()) + "<br><br>"
+							+ "Теперь выберите профиль <b>ArgentumLoader</b> в лаунчере Minecraft и нажмите «Играть» —<br>"
+							+ "недостающие библиотеки лаунчер скачает сам.</html>";
 
 			if (HEADLESS) {
 				System.out.println(result.profilePath);
@@ -129,6 +136,16 @@ public final class AnchorMain {
 		InstallLocation location = findInstallLocation();
 		Path gameDir = location.gameDir;
 
+		// Инстанс Prism/MultiMC устроен иначе, чем ванильный .minecraft — там нет versions/,
+		// а есть mmc-pack.json (список "компонентов") + patches/ (по файлу на компонент).
+		// Якорь кладут прямо в корень инстанса (туда же, где mmc-pack.json), не во вложенную
+		// папку minecraft/ — по его наличию и определяем, какую ветку установки использовать.
+		Path mmcPack = gameDir.resolve("mmc-pack.json");
+
+		if (Files.exists(mmcPack)) {
+			return installPrism(gameDir, mmcPack, location.leftovers);
+		}
+
 		String mcVersion = presetVersion;
 
 		if (mcVersion == null) {
@@ -158,7 +175,7 @@ public final class AnchorMain {
 		String mainClass = require(props, "mainClass");
 
 		String ownCoordinate = loaderGroup + ":" + loaderArtifact + ":" + loaderVersion;
-		installOwnJar(gameDir, loaderGroup, loaderArtifact, loaderVersion);
+		installOwnJar(gameDir.resolve("libraries"), loaderGroup, loaderArtifact, loaderVersion);
 
 		List<String> thirdPartyLibraries = readThirdPartyLibraries(props);
 
@@ -170,16 +187,82 @@ public final class AnchorMain {
 		String json = buildProfileJson(profileId, mcVersion, mainClass, ownCoordinate, thirdPartyLibraries);
 		Files.write(profileJson, json.getBytes(StandardCharsets.UTF_8));
 
-		return new InstallResult(profileJson, location.leftovers);
+		return new InstallResult(profileJson, location.leftovers, false);
+	}
+
+	/**
+	 * Инстанс Prism/MultiMC: версию Minecraft берём из уже существующего mmc-pack.json (не
+	 * спрашиваем — она у инстанса уже одна конкретная), дописываем туда компоненты
+	 * intermediary (если его ещё нет — Prism сам подтянет для него метаданные при запуске) и
+	 * сам загрузчик, плюс пишем сам патч-файл по образцу официального Fabric-патча для
+	 * MultiMC. Собственный jar кладём в общую для всех инстансов libraries/ папку Prism
+	 * (на два уровня выше — из "корень Prism/instances/имя/" в "корень Prism/libraries/").
+	 */
+	private static InstallResult installPrism(Path instanceDir, Path mmcPackPath, List<Path> leftovers) throws IOException {
+		String mmcPack = new String(Files.readAllBytes(mmcPackPath), StandardCharsets.UTF_8);
+
+		String mcVersion = extractComponentVersion(mmcPack, "net.minecraft");
+
+		if (mcVersion == null) {
+			throw new IOException("не удалось найти версию Minecraft (компонент net.minecraft) в " + mmcPackPath);
+		}
+
+		if (!isSupported(mcVersion)) {
+			throw new IOException("версия " + mcVersion + " (из этого инстанса Prism) пока не поддерживается ArgentumLoader "
+					+ "(сейчас доступна: " + String.join(", ", SUPPORTED_VERSIONS) + ")");
+		}
+
+		Properties props = loadLibraryList();
+
+		String loaderGroup = require(props, "loader.group");
+		String loaderArtifact = require(props, "loader.artifact");
+		String loaderVersion = require(props, "loader.version");
+		String mainClass = require(props, "mainClass");
+		String uid = loaderGroup; // com.ganichgg.argentumloader — в стиле Java-пакета, как принято у Prism
+
+		Path prismRoot = instanceDir.getParent() != null && instanceDir.getParent().getParent() != null
+				? instanceDir.getParent().getParent()
+				: instanceDir;
+		Path librariesDir = prismRoot.resolve("libraries");
+
+		String ownCoordinate = loaderGroup + ":" + loaderArtifact + ":" + loaderVersion;
+		installOwnJar(librariesDir, loaderGroup, loaderArtifact, loaderVersion);
+
+		List<String> thirdPartyLibraries = readThirdPartyLibraries(props);
+
+		Path patchesDir = instanceDir.resolve("patches");
+		Files.createDirectories(patchesDir);
+		Path patchFile = patchesDir.resolve(uid + ".json");
+		String patchJson = buildPrismPatchJson(uid, loaderVersion, mainClass, ownCoordinate, thirdPartyLibraries);
+		Files.write(patchFile, patchJson.getBytes(StandardCharsets.UTF_8));
+
+		StringBuilder extraComponents = new StringBuilder();
+
+		if (!hasComponent(mmcPack, "net.fabricmc.intermediary")) {
+			extraComponents.append(",{\"uid\":\"net.fabricmc.intermediary\",\"version\":\"").append(escape(mcVersion)).append("\"}");
+		}
+
+		if (!hasComponent(mmcPack, uid)) {
+			extraComponents.append(",{\"uid\":\"").append(escape(uid)).append("\",\"version\":\"").append(escape(loaderVersion)).append("\"}");
+		}
+
+		if (extraComponents.length() > 0) {
+			String updatedMmcPack = insertIntoComponentsArray(mmcPack, extraComponents.toString());
+			Files.write(mmcPackPath, updatedMmcPack.getBytes(StandardCharsets.UTF_8));
+		}
+
+		return new InstallResult(patchFile, leftovers, true);
 	}
 
 	private static final class InstallResult {
 		final Path profilePath;
 		final List<Path> leftovers;
+		final boolean prismInstance;
 
-		InstallResult(Path profilePath, List<Path> leftovers) {
+		InstallResult(Path profilePath, List<Path> leftovers, boolean prismInstance) {
 			this.profilePath = profilePath;
 			this.leftovers = leftovers;
+			this.prismInstance = prismInstance;
 		}
 	}
 
@@ -481,8 +564,114 @@ public final class AnchorMain {
 		return ret;
 	}
 
-	private static void installOwnJar(Path gameDir, String group, String artifact, String version) throws IOException {
-		Path targetJar = gameDir.resolve("libraries").resolve(mavenPath(group, artifact, version));
+	/**
+	 * Разбивает JSON-массив верхнего уровня (например, "components" в mmc-pack.json) на
+	 * отдельные объекты-элементы, корректно учитывая вложенные {"..."} внутри них (у
+	 * mmc-pack.json это, например, cachedRequires). Полноценный JSON-парсер тут избыточен —
+	 * нам достаточно найти границы каждого объекта.
+	 */
+	private static List<String> splitTopLevelObjects(String json) {
+		List<String> result = new ArrayList<>();
+		int depth = 0;
+		int start = -1;
+
+		for (int i = 0; i < json.length(); i++) {
+			char c = json.charAt(i);
+
+			if (c == '{') {
+				depth++;
+				if (depth == 2) start = i;
+			} else if (c == '}') {
+				if (depth == 2) result.add(json.substring(start, i + 1));
+				depth--;
+			}
+		}
+
+		return result;
+	}
+
+	private static boolean hasComponent(String mmcPackJson, String uid) {
+		String needle = "\"uid\":\"" + uid + "\"";
+
+		for (String component : splitTopLevelObjects(mmcPackJson)) {
+			if (component.replaceAll("\\s", "").contains(needle)) return true;
+		}
+
+		return false;
+	}
+
+	private static String extractComponentVersion(String mmcPackJson, String uid) {
+		String needle = "\"uid\":\"" + uid + "\"";
+
+		for (String component : splitTopLevelObjects(mmcPackJson)) {
+			if (!component.replaceAll("\\s", "").contains(needle)) continue;
+
+			Matcher m = Pattern.compile("\"version\"\\s*:\\s*\"([^\"]*)\"").matcher(component);
+			if (m.find()) return m.group(1);
+		}
+
+		return null;
+	}
+
+	/**
+	 * Вставляет готовые JSON-объекты (строка вида ",{...},{...}") в конец массива
+	 * "components" в mmc-pack.json — перед его закрывающей ']', с учётом вложенных массивов
+	 * внутри отдельных компонентов (cachedRequires и т.п.), которые тоже используют [].
+	 */
+	private static String insertIntoComponentsArray(String mmcPackJson, String extraComponentsJson) {
+		int componentsKeyIdx = mmcPackJson.indexOf("\"components\"");
+
+		if (componentsKeyIdx < 0) {
+			throw new IllegalStateException("в mmc-pack.json не найден ключ \"components\"");
+		}
+
+		int arrStart = mmcPackJson.indexOf('[', componentsKeyIdx);
+		int depth = 0;
+		int arrEnd = -1;
+
+		for (int i = arrStart; i < mmcPackJson.length(); i++) {
+			char c = mmcPackJson.charAt(i);
+
+			if (c == '[') {
+				depth++;
+			} else if (c == ']') {
+				depth--;
+
+				if (depth == 0) {
+					arrEnd = i;
+					break;
+				}
+			}
+		}
+
+		if (arrEnd < 0) {
+			throw new IllegalStateException("не удалось найти конец массива \"components\" в mmc-pack.json");
+		}
+
+		return mmcPackJson.substring(0, arrEnd) + extraComponentsJson + mmcPackJson.substring(arrEnd);
+	}
+
+	private static String buildPrismPatchJson(String uid, String version, String mainClass, String ownCoordinate, List<String> thirdPartyLibraries) {
+		StringBuilder libs = new StringBuilder();
+		libs.append(libraryJsonNoUrl(ownCoordinate)); // собственный jar уже на диске, url не нужен
+
+		for (String lib : thirdPartyLibraries) {
+			libs.append(',').append(lib);
+		}
+
+		return "{\n"
+				+ "  \"formatVersion\": 1,\n"
+				+ "  \"name\": \"ArgentumLoader\",\n"
+				+ "  \"uid\": \"" + escape(uid) + "\",\n"
+				+ "  \"version\": \"" + escape(version) + "\",\n"
+				+ "  \"mainClass\": \"" + escape(mainClass) + "\",\n"
+				+ "  \"libraries\": [" + libs + "],\n"
+				+ "  \"requires\": [{\"uid\": \"net.fabricmc.intermediary\"}]\n"
+				+ "}\n";
+	}
+
+	private static void installOwnJar(Path librariesDir, String group, String artifact, String version) throws IOException {
+		Path targetJar = librariesDir.resolve(mavenPath(group, artifact, version));
 		Files.createDirectories(targetJar.getParent());
 
 		try (InputStream is = AnchorMain.class.getResourceAsStream(LOADER_JAR_RESOURCE)) {
