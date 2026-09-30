@@ -125,6 +125,18 @@ graalvmNative {
 	}
 }
 
+// native-build-tools по умолчанию кладёт рядом с exe те же AWT-библиотеки, что мы уже
+// зашили внутрь него (см. copyNativeLibs) — теперь они там не нужны, ArgentumAnchor.exe
+// самодостаточен. Чистим их и служебные файлы сборки (.args), чтобы в папке оставался
+// только сам exe.
+tasks.named('nativeCompile') {
+	doLast {
+		def outDir = layout.buildDirectory.dir('native/nativeCompile').get().asFile
+		nativeLibNames.each { name -> new File(outDir, name).delete() }
+		outDir.listFiles()?.findAll { it.name.endsWith('.args') }?.each { it.delete() }
+	}
+}
+
 // Портативный .exe со встроенной Java — чтобы якорь работал даже у игроков без
 // отдельно установленной Java. app-image (не msi/exe-инсталлятор), поэтому не
 // требует WiX на машине сборки: просто папка с .exe и рантаймом внутри, которую
